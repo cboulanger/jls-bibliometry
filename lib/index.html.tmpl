@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Index of {{ directory }}</title>
+</head>
+<body>
+    <h1>Index of {{ directory }}</h1>
+    <ul>
+    {% for file in files %}
+        <li><a href="{{ file }}">{{ file }}</a></li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
