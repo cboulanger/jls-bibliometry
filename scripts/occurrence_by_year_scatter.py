@@ -13,7 +13,7 @@ def prepare_data(articles_df, regex_list):
     aggregated = pd.DataFrame(data)
     return aggregated
 
-def plot_by_year(data, dep_col='term', dep_label='Term'):
+def plot_by_year(data, dep_col='term', dep_label='Term', file=None):
     years = data['year'].values
     dep_var = data[dep_col].values
     citation_counts = data['count'].values
@@ -33,7 +33,8 @@ def plot_by_year(data, dep_col='term', dep_label='Term'):
         dep_data = data[data[dep_col] == dep_v][['year', dep_col]].sort_values('year')
         ax.plot(dep_data['year'], dep_data[dep_col], color='grey', linewidth=0.5)
 
+    if file is not None:
+        plt.savefig(file, bbox_inches="tight")
+
     # Show the plot
     return plt.show()
-
-
