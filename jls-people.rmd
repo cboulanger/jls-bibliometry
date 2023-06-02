@@ -8,6 +8,7 @@ library(readxl)
 library(dplyr)
 library(timevis)
 library(stringr)
+library(htmlwidgets)
 
 vertical_stripes = "background: repeating-linear-gradient(to right, transparent, transparent 2px, lightgray 2px, lightgray 4px);"
 diagonal_stripes = "background: repeating-linear-gradient(135deg, transparent, transparent 2px, lightgray 2px, lightgray 4px);"
@@ -24,8 +25,11 @@ editors <- read_excel("data/jls-editors.xlsx")  %>%
       TRUE ~ "background-color: white"
     )
   )
-timevis(editors,
+hw <- timevis(editors,
         showZoom = FALSE,
-        width = "3000px",
+        width = "1500px",
         options = list(start="1974-01-01", end = "2025-12-31", selectable=FALSE, showCurrentTime = FALSE))
+
+saveWidget(hw, "docs/jls-editors.html")
+unlink("docs/jls-editors_files", recursive = TRUE)
 ```
