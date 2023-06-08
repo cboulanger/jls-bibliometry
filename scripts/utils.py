@@ -5,6 +5,16 @@ import requests
 import os
 import re
 import csv
+from dotenv import load_dotenv
+from py2neo import Graph
+
+def get_graph(name):
+    load_dotenv()
+    return Graph(os.getenv('NEO4J_URL'), name=name)
+
+def get_corpus_dir(name):
+    load_dotenv()
+    return os.path.join(os.getenv('CORPUS_BASE_DIR'), name)
 
 class DOICache:
     def __init__(self, file_path):
@@ -53,7 +63,8 @@ def get_metadata(doi, doi_cache : DOICache=None):
     if os.path.exists(cache_file):
         with open(cache_file, 'r') as f:
             metadata = json.load(f)
-    if metadata is None:
+    else:
+        #if metadata is None:
         # in case doi is incomplete, find the complete version in the doi cache
         if doi_cache:
             for d in doi_cache.get_dois():
@@ -80,7 +91,7 @@ def extract_metadata_from_filename(input_string):
 
     if match:
         author = match.group('author')
-        year = match.group('year')
+        year = int(match.group('year'))
         title = match.group('title')
         return author, year, title
     else:
@@ -89,7 +100,7 @@ def extract_metadata_from_filename(input_string):
 def truncate(s, x):
     return s[:x] + '...' if len(s) > x else s
 
-def create_corpus(corpus_dir, doi_cache : DOICache=None):
+def create_corpus(corpus_dir, doi_cache : DOICache=None) -> pd.DataFrame:
     articles = []
     for filename in tqdm(os.listdir(corpus_dir), desc="Analyzing article corpus"):
         file_path = os.path.join(corpus_dir, filename)
@@ -103,7 +114,7 @@ def create_corpus(corpus_dir, doi_cache : DOICache=None):
                         if year is None:
                             # try extended doi
                             doi = f"{doi}.x"
-                            doi_cache.get_year(doi)
+                            year = doi_cache.get_year(doi)
                         title = author = None
                     metadata = get_metadata(doi, doi_cache)
                     if metadata is not None:
@@ -128,4 +139,4 @@ def create_corpus(corpus_dir, doi_cache : DOICache=None):
                         'title': title,
                         'author': author
                     })
-    return pd.DataFrame(articles).sort_values(by='year')
+    return pd.DataFrame(articles).sort_values(by='year').astype({'year':'Int64'})
