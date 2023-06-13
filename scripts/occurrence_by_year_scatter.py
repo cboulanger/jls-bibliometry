@@ -13,7 +13,7 @@ def prepare_data(articles_df, regex_list):
     aggregated = pd.DataFrame(data)
     return aggregated
 
-def plot_by_year(data, dep_col='term', dep_label='Term', file=None):
+def plot_by_year(data, dep_col='term', dep_label='Term', file=None, y_axis_limit=None):
     years = data['year'].values
     dep_var = data[dep_col].values
     citation_counts = data['count'].values
@@ -21,17 +21,20 @@ def plot_by_year(data, dep_col='term', dep_label='Term', file=None):
     # Create plot
     fig, ax = plt.subplots()
 
-    # Set the x and y axis labels
+    # Set the x and y-axis labels
     ax.set_xlabel('Year')
     ax.set_ylabel(dep_label)
 
     # Scatter plot with citation counts as size
-    scatter = ax.scatter(years, dep_var, s=citation_counts)
+    ax.scatter(years, dep_var, s=citation_counts)
 
     # Connect the earliest and last point of each observed variable with a line
     for dep_v in set(dep_var):
         dep_data = data[data[dep_col] == dep_v][['year', dep_col]].sort_values('year')
         ax.plot(dep_data['year'], dep_data[dep_col], color='grey', linewidth=0.5)
+
+    if y_axis_limit is not None:
+        ax.set_ylim(y_axis_limit)  # Set the y-axis limits
 
     if file is not None:
         plt.savefig(file, bbox_inches="tight")
