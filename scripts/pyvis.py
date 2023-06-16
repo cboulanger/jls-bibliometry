@@ -3,6 +3,7 @@ from pyvis.network import Network
 from IPython.display import display, HTML, display_png
 from typing import Union
 from textwrap import shorten
+import json, re
 
 def py2neo_to_pyvis(net: Network, obj: Union[Path, Node, Relationship], auto_rel_label=False, edge_default_width = 3):
     if type(obj) is Path:
@@ -38,37 +39,70 @@ def create_or_update_network(graph: Graph,
                              height: str = "300px",
                              auto_rel_label=False,
                              net: Network = None,
+                             seed: int = None,
                              **kwargs) -> Network:
     data = graph.run(query, **kwargs).data()
     if net is None:
         net = Network(height, notebook=True, cdn_resources='in_line', directed=True)
         net.force_atlas_2based(overlap=0.7)
+        if seed is not None:
+            options = json.loads(net.options.to_json())
+            options['layout'] = {"randomSeed":seed, "improvedLayout":True}
+            options = json.dumps(options)
+            net.set_options(options)
     for row in data:
         for obj in row.values():
             py2neo_to_pyvis(net, obj, auto_rel_label= auto_rel_label)
     return net
 
 def draw_network(net: Network,
-                 file=None,
-                 link_only=False):
+                 title: str = None,
+                 file: str = None,
+                 prev_url: str = None,
+                 next_url: str = None,
+                 link_only: bool = False):
     html = net.generate_html()
-    if file:
+    # remove nonsense in the generated html
+    html = re.sub(r'<center>.*?<h1></h1>.*?</center>', '', html, flags=re.M|re.S)
+    # optional: add title
+    if title is not None:
+        html = html.replace("<head>", f'<head><title>{title}</title>')
+        html = html.replace("<body>", f'<body><h1 style="text-align:center">{title}</h1>')
+    # optional: back & forward links
+    if prev_url or next_url:
+        nav_bar = '<div style="text-align:center">'
+        if prev_url:
+            nav_bar += f'[&nbsp;<a href="{prev_url}">Previous</a>&nbsp;]'
+        if next_url:
+            nav_bar += f' [&nbsp;<a href="{next_url}">Next</a>&nbsp;]'
+        nav_bar += '</div>'
+        html = html.replace("</body>", f'\n{nav_bar}\n</body>')
+    # optional: save to file
+    if file is not None:
         if file.endswith(".html"):
             with open(file, mode="w", encoding="utf-8") as f:
                 f.write(html)
         else:
             raise RuntimeError("Unsupported file extension")
+    # optional: return a link only
     if link_only and file:
         display(HTML(f'<a href="{file}" target="_blank">Click here to open the graph.</a>'))
     else:
         display(HTML(html))
 
+# convenience method
 def draw(graph: Graph,
          query: str,
          height: str = "300px",
-         file=None,
-         do_display=True,
+         title: str = None,
+         file: str = None,
+         link_only = False,
+         do_display = True,
+         seed = None,
          auto_rel_label=False,
          **kwargs):
-    net = create_or_update_network(graph, query, height=height, auto_rel_label=auto_rel_label, **kwargs)
-    return draw_network(net, file=file, link_only=not do_display)
+    # deprecated do_display
+    if do_display == False:
+        link_only = True
+    net = create_or_update_network(graph, query, height=height, seed=seed, auto_rel_label=auto_rel_label, **kwargs)
+    return draw_network(net, file=file, link_only=link_only, title=title)
