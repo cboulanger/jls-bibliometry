@@ -106,3 +106,21 @@ def draw(graph: Graph,
         link_only = True
     net = create_or_update_network(graph, query, height=height, seed=seed, auto_rel_label=auto_rel_label, **kwargs)
     return draw_network(net, file=file, link_only=link_only, title=title)
+
+def create_timeseries(graph: Graph, query: str, file_id:str, title: str = None):
+    start_year = 1974
+    end_year = 2023
+    num_ranges = 5
+    for i in range(num_ranges):
+        decade_start = start_year + (i * 10)
+        decade_end = decade_start + 9
+        if decade_end > end_year:
+            decade_end = end_year
+        net = create_or_update_network(graph, query, height="600", seed=5,
+                                       year_start=decade_start, year_end=decade_end)
+        url = f"figure/{file_id}-{decade_start}-{decade_end}.html"
+        prev_url = f"{file_id}-{decade_start-10}-{decade_start-1}.html" if i > 0 else None
+        next_url = f"{file_id}-{decade_end+1}-{decade_end+10}.html" if i < (num_ranges - 1) else None
+        draw_network(net, title=f"{title}, {decade_start} - {decade_end}",
+                     prev_url=prev_url, next_url= next_url,
+                     file=url, link_only=True)

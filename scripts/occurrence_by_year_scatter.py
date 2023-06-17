@@ -37,7 +37,7 @@ def plot_by_year(data, dep_col='term', dep_label='Term', file=None, y_axis_limit
         ax.set_ylim(y_axis_limit)  # Set the y-axis limits
 
     if file is not None:
-        plt.savefig(file, bbox_inches="tight")
+        plt.savefig(file, bbox_inches="tight", dpi=300)
 
     if title is not None:
         plt.title(title)
