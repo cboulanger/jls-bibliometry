@@ -10,10 +10,12 @@ def py2neo_to_pyvis(net: Network, obj: Union[Path, Node, Relationship], auto_rel
         for o in walk(obj):
             py2neo_to_pyvis(net, o)
     elif type(obj) is Node:
-        label = obj['display_name'] or obj['title'] or obj['name'] or obj['id'] or ''
-        label = shorten(label, width=50, placeholder="...").replace(':', ':\n')
-        group = obj['group'] or str(obj.labels)
-        net.add_node(obj.identity, label=label, group=group, font={'size': 20})
+        if obj['label'] is None or obj['label'] == "":
+            label = obj['display_name'] or obj['title'] or obj['name'] or obj['id'] or ''
+            label = shorten(label, width=50, placeholder="...").replace(':', ':\n')
+            obj['label'] = label
+        obj['group'] = obj['group'] or str(obj.labels)
+        net.add_node(obj.identity, font={'size': 20}, **obj)
     elif issubclass(type(obj), Relationship):
         start_node = obj.start_node
         end_node = obj.end_node
@@ -107,7 +109,7 @@ def draw(graph: Graph,
     net = create_or_update_network(graph, query, height=height, seed=seed, auto_rel_label=auto_rel_label, **kwargs)
     return draw_network(net, file=file, link_only=link_only, title=title)
 
-def create_timeseries(graph: Graph, query: str, file_id:str, title: str = None):
+def create_timeseries(graph: Graph, query: str, file_id:str, title: str = None, seed=5):
     start_year = 1974
     end_year = 2023
     num_ranges = 5
@@ -116,7 +118,7 @@ def create_timeseries(graph: Graph, query: str, file_id:str, title: str = None):
         decade_end = decade_start + 9
         if decade_end > end_year:
             decade_end = end_year
-        net = create_or_update_network(graph, query, height="600", seed=5,
+        net = create_or_update_network(graph, query, height="600", seed=seed,
                                        year_start=decade_start, year_end=decade_end)
         url = f"figure/{file_id}-{decade_start}-{decade_end}.html"
         prev_url = f"{file_id}-{decade_start-10}-{decade_start-1}.html" if i > 0 else None
