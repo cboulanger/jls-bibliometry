@@ -1,11 +1,9 @@
-import os.path
-
+import os, json, re
 from py2neo import Graph, Path, Node, Relationship, walk
 from pyvis.network import Network
-from IPython.display import display, HTML, display_png
+from IPython.display import display, HTML
 from typing import Union
 from textwrap import shorten
-import json, re
 
 def py2neo_to_pyvis(net: Network, obj: Union[Path, Node, Relationship], auto_rel_label=False, edge_default_width = 3):
     if type(obj) is Path:
@@ -48,7 +46,7 @@ def create_or_update_network(graph: Graph,
     data = graph.run(query, **kwargs).data()
     if net is None:
         net = Network(height, notebook=True, cdn_resources='in_line', directed=True)
-        net.force_atlas_2based(overlap=0.7)
+        net.force_atlas_2based(overlap=0.7, damping=1)
         if seed is not None:
             options = json.loads(net.options.to_json())
             options['layout'] = {"randomSeed":seed, "improvedLayout":True}
@@ -88,6 +86,8 @@ def draw_network(net: Network,
             nav_bar += f' [&nbsp;<a href="{next_url}">Next</a>&nbsp;]'
         nav_bar += '</div>'
         html = html.replace("</body>", f'\n{nav_bar}\n</body>')
+    # stop physics after timeout
+    html = html.replace("</body>", '\n<script>window.setTimeout(()=>network.setOptions({physics:false}),1000)</script>\n</body>')
     # optional: save to file
     if file is not None:
         if file.endswith(".html"):
@@ -120,7 +120,12 @@ def draw(graph: Graph,
     net = create_or_update_network(graph, query, height=height, seed=seed, auto_rel_label=auto_rel_label, **kwargs)
     return draw_network(net, file=file, link_only=link_only, title=title)
 
-def create_timeseries(graph: Graph, query: str, file_id:str, title: str = None, seed=5, file_prefix="docs/"):
+def create_timeseries(graph: Graph,
+                      query: str, file_id:str,
+                      title: str = None,
+                      caption: str = None,
+                      seed=5,
+                      file_prefix="docs/"):
     start_year = 1974
     end_year = 2023
     num_ranges = 5
@@ -135,6 +140,6 @@ def create_timeseries(graph: Graph, query: str, file_id:str, title: str = None, 
         url = f"https://cboulanger.github.io/jls-bibliometry/{file}"
         prev_url = f"{file_id}-{decade_start-10}-{decade_start-1}.html" if i > 0 else None
         next_url = f"{file_id}-{decade_end+1}-{decade_end+10}.html" if i < (num_ranges - 1) else None
-        draw_network(net, title=f"{title}, {decade_start} - {decade_end}",
+        draw_network(net, title=f"{title}, {decade_start} - {decade_end}", caption=caption,
                      prev_url=prev_url, next_url= next_url,
                      file=f"{file_prefix}{file}", url=url, link_only=True)
