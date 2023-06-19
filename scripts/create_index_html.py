@@ -21,6 +21,6 @@ def generate_html(directory):
 
     # Write the rendered HTML to a file
     with open(os.path.join(directory, 'index.html'), 'w') as html_file:
-        html_file.write(html_content)
+        html_file.write(html_content.replace("<ul>","<ol>").replace("</ul>","</ol>"))
 
 generate_html('docs')
