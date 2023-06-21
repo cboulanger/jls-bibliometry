@@ -70,9 +70,8 @@ def generate_script(min_edge_value: int = 10):
         const updateNetwork = value => {
           // Check each edge
           edges.forEach(edge => {
-            // If edge value is less than slider value and edge is not hidden
-            if (edge.value < value && !edge.hidden) {
-              edge.hidden = true; // mark as hidden
+            // if edge value is less than slider value, move it to the cache
+            if (edge.value < value) {
               edgeCache.push(edge); // add to cache
               edges.remove(edge.id); // remove from DataSet
             }
@@ -80,9 +79,8 @@ def generate_script(min_edge_value: int = 10):
           // Check each cached edge
           for (let i = edgeCache.length - 1; i >= 0; i--) {
             let cachedEdge = edgeCache[i];
-            // If cached edge value is more than or equal to slider value and edge is hidden
-            if (cachedEdge.value >= value && cachedEdge.hidden) {
-              cachedEdge.hidden = false; // mark as visible
+            // If cached edge value is more than or equal to slider value, re-add it to the network
+            if (cachedEdge.value >= value) {
               edges.add(cachedEdge); // add back to DataSet
               edgeCache.splice(i, 1); // remove from cache
             }
