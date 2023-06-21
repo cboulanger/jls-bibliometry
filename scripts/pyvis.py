@@ -57,6 +57,50 @@ def create_or_update_network(graph: Graph,
             py2neo_to_pyvis(net, obj, auto_rel_label= auto_rel_label)
     return net
 
+def generate_script():
+    return """
+        let edgeCache = []; // this array will store the removed edges
+
+        const slider = document.getElementById("edgeValueSlider");
+        const onSliderChange = value => {
+          document.getElementById("sliderValue").innerText = value;
+          // Check each edge
+          edges.forEach(edge => {
+            // If edge value is less than slider value and edge is not hidden
+            if (edge.value < value && !edge.hidden) {
+              edge.hidden = true; // mark as hidden
+              edgeCache.push(edge); // add to cache
+              edges.remove(edge.id); // remove from DataSet
+            }
+          });
+          // Check each cached edge
+          for (let i = edgeCache.length - 1; i >= 0; i--) {
+            let cachedEdge = edgeCache[i];
+            // If cached edge value is more than or equal to slider value and edge is hidden
+            if (cachedEdge.value >= value && cachedEdge.hidden) {
+              cachedEdge.hidden = false; // mark as visible
+              edges.add(cachedEdge); // add back to DataSet
+              edgeCache.splice(i, 1); // remove from cache
+            }
+          }
+        };
+        let min = Math.min(...edges.get().map(edge => edge.value));
+        let max = Math.max(...edges.get().map(edge => edge.value));
+        let step = 10
+        slider.addEventListener('input', e => onSliderChange(e.target.value));
+        slider.min = min;
+        slider.max = max;
+        const datalist = document.getElementById('steplist');
+        let start = Math.floor(min / step) * step; // Start from the nearest higher multiple of step
+        for (let i = start; i <= max; i += step) {
+            let option = document.createElement('option');
+            option.value = Math.max(i,min);
+            datalist.appendChild(option);
+        }
+        slider.value = 10;
+        onSliderChange(slider.value);
+    """
+
 def draw_network(net: Network,
                  title: str = None,
                  caption: str = None,
@@ -75,19 +119,26 @@ def draw_network(net: Network,
     # optional: caption
     if caption is not None:
         html = html.replace("</body>", f'\n<div style="text-align:center">{caption}</div>\n</body>')
-    # optional: back & forward links
+    # navigation bar
+    nav_bar = '<div style="text-align:center">'
+    if caption:
+        nav_bar = "<hr/>" + nav_bar
+    # optional: back and forward links
     if prev_url or next_url:
-        nav_bar = '<div style="text-align:center">'
-        if caption:
-            nav_bar = "<hr/>" + nav_bar
         if prev_url:
-            nav_bar += f'[&nbsp;<a href="{prev_url}">Previous</a>&nbsp;]'
+            nav_bar += f'<a href="{prev_url}">Previous</a>'
+            nav_bar += '&nbsp;| '
         if next_url:
-            nav_bar += f' [&nbsp;<a href="{next_url}">Next</a>&nbsp;]'
-        nav_bar += '</div>'
-        html = html.replace("</body>", f'\n{nav_bar}\n</body>')
-    # stop physics after timeout
-    html = html.replace("</body>", '\n<script>window.setTimeout(()=>network.setOptions({physics:false}),1000)</script>\n</body>')
+            nav_bar += f'<a href="{next_url}">Next</a>'
+            nav_bar += '&nbsp;| '
+    nav_bar += '<datalist id="steplist"></datalist>'
+    nav_bar += 'Minimum citations:&nbsp;<span id="sliderValue"></span>&nbsp;'
+    nav_bar += '<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>'
+    nav_bar += '&nbsp;| '
+    nav_bar += 'Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })">'
+    nav_bar += '</div>'
+    nav_bar += f'\n<script>{generate_script()}</script>'
+    html = html.replace("</body>", f'\n{nav_bar}\n</body>')
     # optional: save to file
     if file is not None:
         if file.endswith(".html"):

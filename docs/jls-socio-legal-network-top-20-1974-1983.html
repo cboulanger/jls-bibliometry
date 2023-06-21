@@ -334,10 +334,50 @@ function highlightFilter(filter) {
               drawGraph();
         </script>
     
-<div style="text-align:center">Included are the 20 journals most cited by the JLS or citing the JLS most in the given period. Only relations with > 10 citations are counted. <br/>Size of the nodes represent the total citations of the journal in the dataset in the givne period. Source: Web of Science.</div>
+<div style="text-align:center">Included are the 20 journals most cited by the JLS or citing the JLS most in the given period. Size of the nodes represent the total citations of the journal in the dataset in the given period. Source: Web of Science.</div>
 
-<hr/><div style="text-align:center"> [&nbsp;<a href="jls-socio-legal-network-top-20-1984-1993.html">Next</a>&nbsp;]</div>
+<hr/><div style="text-align:center"><a href="jls-socio-legal-network-top-20-1984-1993.html">Next</a>&nbsp;| <datalist id="steplist"></datalist>Minimum citations:&nbsp;<span id="sliderValue"></span>&nbsp;<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>&nbsp;| Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })"></div>
+<script>
+        let edgeCache = []; // this array will store the removed edges
 
-<script>window.setTimeout(()=>network.setOptions({physics:false}),1000)</script>
+        const slider = document.getElementById("edgeValueSlider");
+        const onSliderChange = value => {
+          document.getElementById("sliderValue").innerText = value;
+          // Check each edge
+          edges.forEach(edge => {
+            // If edge value is less than slider value and edge is not hidden
+            if (edge.value < value && !edge.hidden) {
+              edge.hidden = true; // mark as hidden
+              edgeCache.push(edge); // add to cache
+              edges.remove(edge.id); // remove from DataSet
+            }
+          });
+          // Check each cached edge
+          for (let i = edgeCache.length - 1; i >= 0; i--) {
+            let cachedEdge = edgeCache[i];
+            // If cached edge value is more than or equal to slider value and edge is hidden
+            if (cachedEdge.value >= value && cachedEdge.hidden) {
+              cachedEdge.hidden = false; // mark as visible
+              edges.add(cachedEdge); // add back to DataSet
+              edgeCache.splice(i, 1); // remove from cache
+            }
+          }
+        };
+        let min = Math.min(...edges.get().map(edge => edge.value));
+        let max = Math.max(...edges.get().map(edge => edge.value));
+        let step = 10
+        slider.addEventListener('input', e => onSliderChange(e.target.value));
+        slider.min = min;
+        slider.max = max;
+        const datalist = document.getElementById('steplist');
+        let start = Math.floor(min / step) * step; // Start from the nearest higher multiple of step
+        for (let i = start; i <= max; i += step) {
+            let option = document.createElement('option');
+            option.value = Math.max(i,min);
+            datalist.appendChild(option);
+        }
+        slider.value = 10;
+        onSliderChange(slider.value);
+    </script>
 </body>
 </html>
