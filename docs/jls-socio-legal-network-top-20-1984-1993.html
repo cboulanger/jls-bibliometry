@@ -336,7 +336,7 @@ function highlightFilter(filter) {
     
 <div style="text-align:center; text-wrap: balance">Included are the 20 journals most cited by the JLS or citing the JLS most in the given period. Size of the nodes represent the total citations of the journal in the dataset in the given period. Source: Web of Science.</div>
 
-<hr/><div style="text-align:center"><a href="jls-socio-legal-network-top-20-1974-1983.html">Previous</a>&nbsp;| <a href="jls-socio-legal-network-top-20-1994-2003.html">Next</a>&nbsp;| <datalist id="steplist"></datalist>Minimum citations:&nbsp;<span id="sliderValue" style="min-width: 50px"></span>&nbsp;<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>&nbsp;| Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })"></div>
+<hr/><div style="text-align:center"><a href="jls-socio-legal-network-top-20-1974-1983.html">Previous</a>&nbsp;| <a href="jls-socio-legal-network-top-20-1994-2003.html">Next</a>&nbsp;| <datalist id="steplist"></datalist>Minimum citations:&nbsp;<span id="sliderValue" style="width: 30px;display: inline-block;"></span>&nbsp;<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>&nbsp;| Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })"></div>
 <script>
         const storageId = "pyvis-network-slider-value"
         let edgeCache = []; // this array will store the removed edges
@@ -397,7 +397,7 @@ function highlightFilter(filter) {
             option.value = Math.max(i,min);
             datalist.appendChild(option);
         }
-        const value = Math.min(window.localStorage.getItem(storageId) || 10, max);
+        const value = Math.min(window.localStorage.getItem(storageId) || None, max);
         slider.value = value;
         updateNetwork(value);
         displaySliderValue(value)

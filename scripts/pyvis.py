@@ -60,7 +60,7 @@ def create_or_update_network(graph: Graph,
             py2neo_to_pyvis(net, obj, auto_rel_label= auto_rel_label)
     return net
 
-def generate_script():
+def generate_script(min_edge_value: int = 10):
     return """
         const storageId = "pyvis-network-slider-value"
         let edgeCache = []; // this array will store the removed edges
@@ -121,11 +121,11 @@ def generate_script():
             option.value = Math.max(i,min);
             datalist.appendChild(option);
         }
-        const value = Math.min(window.localStorage.getItem(storageId) || 10, max);
+        const value = Math.min(window.localStorage.getItem(storageId) || min_edge_value, max);
         slider.value = value;
         updateNetwork(value);
         displaySliderValue(value)
-    """
+    """.replace("min_edge_value", str(min_edge_value))
 
 def draw_network(net: Network,
                  title: str = None,
@@ -134,6 +134,9 @@ def draw_network(net: Network,
                  url: str = None,
                  prev_url: str = None,
                  next_url: str = None,
+                 show_slider: bool = False,
+                 min_edge_value: int = None,
+                 show_physics_toggle: bool = False,
                  link_only: bool = False):
     html = net.generate_html()
     # remove nonsense in the generated html
@@ -157,13 +160,17 @@ def draw_network(net: Network,
         if next_url:
             nav_bar += f'<a href="{next_url}">Next</a>'
             nav_bar += '&nbsp;| '
-    nav_bar += '<datalist id="steplist"></datalist>'
-    nav_bar += 'Minimum citations:&nbsp;<span id="sliderValue" style="min-width: 50px"></span>&nbsp;'
-    nav_bar += '<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>'
-    nav_bar += '&nbsp;| '
-    nav_bar += 'Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })">'
+    if show_slider is not None:
+        nav_bar += '<datalist id="steplist"></datalist>'
+        nav_bar += 'Minimum citations:&nbsp;<span id="sliderValue" style="width: 30px;display: inline-block;"></span>&nbsp;'
+        nav_bar += '<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>'
+        nav_bar += '&nbsp;| '
+    # optional: show checkbox to toggle physics
+    if show_physics_toggle == True:
+        nav_bar += 'Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })">'
     nav_bar += '</div>'
-    nav_bar += f'\n<script>{generate_script()}</script>'
+    if show_slider is not None:
+        nav_bar += f'\n<script>{generate_script(min_edge_value)}</script>'
     html = html.replace("</body>", f'\n{nav_bar}\n</body>')
     # optional: save to file
     if file is not None:
@@ -180,7 +187,7 @@ def draw_network(net: Network,
     else:
         display(HTML(html))
 
-# convenience method
+# convenience method, deprecated, use create_or_update_network() and draw_network() instead
 def draw(graph: Graph,
          query: str,
          height: str = "300px",
@@ -219,4 +226,5 @@ def create_timeseries(graph: Graph,
         next_url = f"{file_id}-{decade_end+1}-{decade_end+10}.html" if i < (num_ranges - 1) else None
         draw_network(net, title=f"{title}, {decade_start} - {decade_end}", caption=caption,
                      prev_url=prev_url, next_url= next_url,
-                     file=f"{file_prefix}{file}", url=url, link_only=True)
+                     file=f"{file_prefix}{file}", url=url, link_only=True,
+                     show_slider=True, show_physics_toggle=True)
