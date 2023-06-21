@@ -5,7 +5,10 @@ from IPython.display import display, HTML
 from typing import Union
 from textwrap import shorten
 
-def py2neo_to_pyvis(net: Network, obj: Union[Path, Node, Relationship], auto_rel_label=False, edge_default_width = 3):
+def py2neo_to_pyvis(net: Network,
+                    obj: Union[Path, Node, Relationship],
+                    auto_rel_label=False,
+                    edge_default_width = 3):
     if type(obj) is Path:
         for o in walk(obj):
             py2neo_to_pyvis(net, o)
@@ -62,8 +65,9 @@ def generate_script():
         const storageId = "pyvis-network-slider-value"
         let edgeCache = []; // this array will store the removed edges
         const slider = document.getElementById("edgeValueSlider");
-        const onSliderChange = value => {
-          document.getElementById("sliderValue").innerText = value;
+        
+        // update the network according to the slider value
+        const updateNetwork = value => {
           // Check each edge
           edges.forEach(edge => {
             // If edge value is less than slider value and edge is not hidden
@@ -85,6 +89,12 @@ def generate_script():
           }
           window.localStorage.setItem(storageId, value);
         };
+        
+        // update the display with the value of the slider
+        const displaySliderValue = value => {
+            document.getElementById("sliderValue").innerText = value
+        }
+        
         // determine highest and lowest number of citation 
         let min = Math.min(...edges.get().map(edge => edge.value));
         let max = Math.max(...edges.get().map(edge => edge.value));
@@ -95,14 +105,13 @@ def generate_script():
         let delta = max - min;
         let step;
         for(let s of steps) {
-            if(Math.ceil(delta / s) <= maxOptions) {
-                step = s;
-                break;
-            }
+            step = s;
+            if(Math.ceil(delta / s) <= maxOptions) break;
         }
         
         // configure the slider
-        slider.addEventListener('change', e => onSliderChange(e.target.value));
+        slider.addEventListener('change', e => updateNetwork(e.target.value));
+        slider.addEventListener('input', e => displaySliderValue(e.target.value))
         slider.min = min;
         slider.max = max;
         const datalist = document.getElementById('steplist');
@@ -112,9 +121,10 @@ def generate_script():
             option.value = Math.max(i,min);
             datalist.appendChild(option);
         }
-        const value = window.localStorage.getItem(storageId) || 10;
-        slider.value = Math.min(value, max);
-        onSliderChange(value);
+        const value = Math.min(window.localStorage.getItem(storageId) || 10, max);
+        slider.value = value;
+        updateNetwork(value);
+        displaySliderValue(value)
     """
 
 def draw_network(net: Network,
@@ -134,7 +144,7 @@ def draw_network(net: Network,
         html = html.replace("<body>", f'<body><h1 style="text-align:center">{title}</h1>')
     # optional: caption
     if caption is not None:
-        html = html.replace("</body>", f'\n<div style="text-align:center">{caption}</div>\n</body>')
+        html = html.replace("</body>", f'\n<div style="text-align:center; text-wrap: balance">{caption}</div>\n</body>')
     # navigation bar
     nav_bar = '<div style="text-align:center">'
     if caption:
@@ -148,7 +158,7 @@ def draw_network(net: Network,
             nav_bar += f'<a href="{next_url}">Next</a>'
             nav_bar += '&nbsp;| '
     nav_bar += '<datalist id="steplist"></datalist>'
-    nav_bar += 'Minimum citations:&nbsp;<span id="sliderValue"></span>&nbsp;'
+    nav_bar += 'Minimum citations:&nbsp;<span id="sliderValue" style="min-width: 50px"></span>&nbsp;'
     nav_bar += '<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>'
     nav_bar += '&nbsp;| '
     nav_bar += 'Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })">'
