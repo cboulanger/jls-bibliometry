@@ -338,8 +338,8 @@ function highlightFilter(filter) {
 
 <hr/><div style="text-align:center"><a href="jls-socio-legal-network-top-20-1984-1993.html">Next</a>&nbsp;| <datalist id="steplist"></datalist>Minimum citations:&nbsp;<span id="sliderValue"></span>&nbsp;<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>&nbsp;| Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })"></div>
 <script>
+        const storageId = "pyvis-network-slider-value"
         let edgeCache = []; // this array will store the removed edges
-
         const slider = document.getElementById("edgeValueSlider");
         const onSliderChange = value => {
           document.getElementById("sliderValue").innerText = value;
@@ -362,11 +362,26 @@ function highlightFilter(filter) {
               edgeCache.splice(i, 1); // remove from cache
             }
           }
+          window.localStorage.setItem(storageId, value);
         };
+        // determine highest and lowest number of citation 
         let min = Math.min(...edges.get().map(edge => edge.value));
         let max = Math.max(...edges.get().map(edge => edge.value));
-        let step = 10
-        slider.addEventListener('input', e => onSliderChange(e.target.value));
+        
+        // dynamically determine the slider options (=ticks)
+        let steps = [1, 2, 5, 10, 25, 50, 100];
+        let maxOptions = 10;
+        let delta = max - min;
+        let step;
+        for(let s of steps) {
+            if(Math.ceil(delta / s) <= maxOptions) {
+                step = s;
+                break;
+            }
+        }
+        
+        // configure the slider
+        slider.addEventListener('change', e => onSliderChange(e.target.value));
         slider.min = min;
         slider.max = max;
         const datalist = document.getElementById('steplist');
@@ -376,8 +391,9 @@ function highlightFilter(filter) {
             option.value = Math.max(i,min);
             datalist.appendChild(option);
         }
-        slider.value = 10;
-        onSliderChange(slider.value);
+        const value = window.localStorage.getItem(storageId) || 10;
+        slider.value = Math.min(value, max);
+        onSliderChange(value);
     </script>
 </body>
 </html>

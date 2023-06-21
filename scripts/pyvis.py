@@ -59,8 +59,8 @@ def create_or_update_network(graph: Graph,
 
 def generate_script():
     return """
+        const storageId = "pyvis-network-slider-value"
         let edgeCache = []; // this array will store the removed edges
-
         const slider = document.getElementById("edgeValueSlider");
         const onSliderChange = value => {
           document.getElementById("sliderValue").innerText = value;
@@ -83,11 +83,26 @@ def generate_script():
               edgeCache.splice(i, 1); // remove from cache
             }
           }
+          window.localStorage.setItem(storageId, value);
         };
+        // determine highest and lowest number of citation 
         let min = Math.min(...edges.get().map(edge => edge.value));
         let max = Math.max(...edges.get().map(edge => edge.value));
-        let step = 10
-        slider.addEventListener('input', e => onSliderChange(e.target.value));
+        
+        // dynamically determine the slider options (=ticks)
+        let steps = [1, 2, 5, 10, 25, 50, 100];
+        let maxOptions = 10;
+        let delta = max - min;
+        let step;
+        for(let s of steps) {
+            if(Math.ceil(delta / s) <= maxOptions) {
+                step = s;
+                break;
+            }
+        }
+        
+        // configure the slider
+        slider.addEventListener('change', e => onSliderChange(e.target.value));
         slider.min = min;
         slider.max = max;
         const datalist = document.getElementById('steplist');
@@ -97,8 +112,9 @@ def generate_script():
             option.value = Math.max(i,min);
             datalist.appendChild(option);
         }
-        slider.value = 10;
-        onSliderChange(slider.value);
+        const value = window.localStorage.getItem(storageId) || 10;
+        slider.value = Math.min(value, max);
+        onSliderChange(value);
     """
 
 def draw_network(net: Network,
