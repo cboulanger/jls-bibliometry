@@ -119,11 +119,15 @@ def generate_script(min_edge_value: int = 10):
             option.value = Math.max(i,min);
             datalist.appendChild(option);
         }
-        const value = Math.min(window.localStorage.getItem(storageId) || min_edge_value, max);
+        // the default slider value comes either from the "min_edge_value" query param, 
+        // the local storage (to persist across pages), or a value passed to the script
+        const defaultValue = parseInt(new URLSearchParams(document.location.search).get('min_edge_value')) || 
+                parseInt(window.localStorage.getItem(storageId)) || $min_edge_value;
+        const value = Math.min(defaultValue, max);
         slider.value = value;
         updateNetwork(value);
         displaySliderValue(value)
-    """.replace("min_edge_value", str(min_edge_value))
+    """.replace("$min_edge_value", str(min_edge_value))
 
 def draw_network(net: Network,
                  title: str = None,
