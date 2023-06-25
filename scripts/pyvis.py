@@ -5,10 +5,11 @@ from IPython.display import display, HTML
 from typing import Union
 from textwrap import shorten
 
+
 def py2neo_to_pyvis(net: Network,
                     obj: Union[Path, Node, Relationship],
                     auto_rel_label=False,
-                    edge_default_width = 3):
+                    edge_default_width=3):
     if type(obj) is Path:
         for o in walk(obj):
             py2neo_to_pyvis(net, o)
@@ -39,6 +40,7 @@ def py2neo_to_pyvis(net: Network,
             obj['width'] = edge_default_width
         net.add_edge(start_node.identity, end_node.identity, **obj)
 
+
 def create_or_update_network(graph: Graph,
                              query: str,
                              height: str = "300px",
@@ -52,13 +54,14 @@ def create_or_update_network(graph: Graph,
         net.force_atlas_2based(overlap=0.7, damping=1)
         if seed is not None:
             options = json.loads(net.options.to_json())
-            options['layout'] = {"randomSeed":seed, "improvedLayout":True}
+            options['layout'] = {"randomSeed": seed, "improvedLayout": True}
             options = json.dumps(options)
             net.set_options(options)
     for row in data:
         for obj in row.values():
-            py2neo_to_pyvis(net, obj, auto_rel_label= auto_rel_label)
+            py2neo_to_pyvis(net, obj, auto_rel_label=auto_rel_label)
     return net
+
 
 def generate_script(min_edge_value: int = 10):
     return """
@@ -129,6 +132,7 @@ def generate_script(min_edge_value: int = 10):
         displaySliderValue(value)
     """.replace("$min_edge_value", str(min_edge_value))
 
+
 def draw_network(net: Network,
                  title: str = None,
                  caption: str = None,
@@ -142,7 +146,7 @@ def draw_network(net: Network,
                  link_only: bool = False):
     html = net.generate_html()
     # remove nonsense in the generated html
-    html = re.sub(r'<center>.*?<h1></h1>.*?</center>', '', html, flags=re.M|re.S)
+    html = re.sub(r'<center>.*?<h1></h1>.*?</center>', '', html, flags=re.M | re.S)
     # optional: add title
     if title is not None:
         html = html.replace("<head>", f'<head><title>{title}</title>')
@@ -189,15 +193,16 @@ def draw_network(net: Network,
     else:
         display(HTML(html))
 
+
 # convenience method, deprecated, use create_or_update_network() and draw_network() instead
 def draw(graph: Graph,
          query: str,
          height: str = "300px",
          title: str = None,
          file: str = None,
-         link_only = False,
-         do_display = True,
-         seed = None,
+         link_only=False,
+         do_display=True,
+         seed=None,
          auto_rel_label=False,
          **kwargs):
     # deprecated do_display
@@ -206,12 +211,18 @@ def draw(graph: Graph,
     net = create_or_update_network(graph, query, height=height, seed=seed, auto_rel_label=auto_rel_label, **kwargs)
     return draw_network(net, file=file, link_only=link_only, title=title)
 
+
 def create_timeseries(graph: Graph,
-                      query: str, file_id:str,
+                      query: str,
+                      file_id: str,
                       title: str = None,
                       caption: str = None,
-                      seed=5,
-                      file_prefix="docs/"):
+                      seed: int = 5,
+                      min_edge_value: int = None,
+                      url: str = None,
+                      file_prefix: str = "",
+                      show_slider: bool = True,
+                      show_physics_toggle: bool = True):
     start_year = 1974
     end_year = 2023
     num_ranges = 5
@@ -223,10 +234,11 @@ def create_timeseries(graph: Graph,
         net = create_or_update_network(graph, query, height="600", seed=seed,
                                        year_start=decade_start, year_end=decade_end)
         file = f"{file_id}-{decade_start}-{decade_end}.html"
-        url = f"https://cboulanger.github.io/jls-bibliometry/{file}"
-        prev_url = f"{file_id}-{decade_start-10}-{decade_start-1}.html" if i > 0 else None
-        next_url = f"{file_id}-{decade_end+1}-{decade_end+10}.html" if i < (num_ranges - 1) else None
+        if url is not None:
+            url = f"{url}/{file}"
+            prev_url = f"{file_id}-{decade_start - 10}-{decade_start - 1}.html" if i > 0 else None
+            next_url = f"{file_id}-{decade_end + 1}-{decade_end + 10}.html" if i < (num_ranges - 1) else None
         draw_network(net, title=f"{title}, {decade_start} - {decade_end}", caption=caption,
-                     prev_url=prev_url, next_url= next_url,
-                     file=f"{file_prefix}{file}", url=url, link_only=True,
-                     show_slider=True, show_physics_toggle=True)
+                     prev_url=prev_url, next_url=next_url,
+                     file=f"{file_prefix}{file}", url=url, link_only=True, min_edge_value=min_edge_value,
+                     show_slider=show_slider, show_physics_toggle=show_physics_toggle)
