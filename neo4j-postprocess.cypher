@@ -124,13 +124,14 @@ RETURN count(node);
 
 // Handle different spellings of author names
 WITH [
-       ["priban", "prïibaânï", "přibáň"],
-       ["de sousa santos", "desousasantos"]
-     ] AS families
-UNWIND families AS familyList
+       ["priban, j", "prïibaânï, j", "přibáň, j"],
+       ["de sousa santos, b", "desousasantos, b", "santos, b"],
+       ["braithwaite, j", "braithwaite, ej"]
+     ] AS displayNames
+UNWIND displayNames AS displayName
 MATCH (a:Author)
-  WHERE a.family IN familyList
-WITH a.given AS givenName, collect(a) AS nodes
+  WHERE a.display_name IN displayName
+WITH collect(a) AS nodes
 CALL apoc.refactor.mergeNodes(nodes,{
   properties:"discard",
   mergeRels:true
