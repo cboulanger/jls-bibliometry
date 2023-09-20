@@ -222,10 +222,10 @@ def create_timeseries(graph: Graph,
                       url: str = None,
                       file_prefix: str = "",
                       show_slider: bool = True,
-                      show_physics_toggle: bool = True):
-    start_year = 1974
-    end_year = 2023
-    num_ranges = 5
+                      show_physics_toggle: bool = True,
+                      start_year=1974,
+                      end_year=2023,
+                      num_ranges=5):
     for i in range(num_ranges):
         decade_start = start_year + (i * 10)
         decade_end = decade_start + 9
