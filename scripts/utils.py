@@ -2,18 +2,21 @@ import pandas as pd
 from tqdm.notebook import tqdm
 import json
 import requests
-import os
 import re
 import csv
-from dotenv import load_dotenv
 from py2neo import Graph
+import os
+import pickle
+from dotenv import load_dotenv
+from IPython.display import display, HTML
+import time
+
+load_dotenv()
 
 def get_graph(name):
-    load_dotenv()
     return Graph(os.getenv('NEO4J_URL'), name=name)
 
 def get_corpus_dir(name):
-    load_dotenv()
     return os.path.join(os.getenv('CORPUS_BASE_DIR'), name)
 
 class DOICache:
@@ -57,32 +60,46 @@ def extract_author(metadata):
     author = metadata.get('author', [])
     return author[0].get('family','') if len(author) > 0 else ''
 
-def get_metadata(doi, doi_cache : DOICache=None):
+def get_metadata(doi, doi_cache: DOICache=None):
     cache_file = f'cache/{doi}.json'
     metadata = None
     if os.path.exists(cache_file):
         with open(cache_file, 'r') as f:
             metadata = json.load(f)
-    else:
-        #if metadata is None:
+    if metadata is None or len(metadata) == 0:
         # in case doi is incomplete, find the complete version in the doi cache
         if doi_cache:
             for d in doi_cache.get_dois():
                 if d[:len(doi)] == doi:
                     doi = d
                     break
-        url = f'https://api.crossref.org/works/{doi}'
-        print(f"Looking up {doi}...")
-        response = requests.get(url)
-        try:
-            metadata = response.json()['message']
-        except json.JSONDecodeError:
-            print(f"CrossRef error: could not load metadata for {url}")
-            metadata = {}
+        email = os.environ.get("CROSSREF_API_EMAIL")
 
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        with open(cache_file, 'w') as f:
-            json.dump(metadata, f)
+        for attempt in range(3):  # Retry mechanism
+            url = f'https://api.crossref.org/works/{doi}?mailto={email}'
+            try:
+                response = requests.get(url, timeout=3)  # Timeout of 3 seconds
+                metadata = response.json()['message']
+                break  # Break out of the loop if the request is successful
+            except requests.exceptions.Timeout:
+                if attempt == 2:  # If this was the third attempt
+                    print(f"Timeout error: could not retrieve data from {url}")
+                    break
+                else:
+                    print(f"Attempt {attempt + 1} failed, retrying...")
+                    time.sleep(1)
+            except json.JSONDecodeError:
+                if doi.endswith(".x"):
+                    break
+                # add ".x" and try again
+                doi += ".x"
+
+    if metadata is None:
+        print(f"CrossRef error: could not load metadata for {doi}")
+
+    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+    with open(cache_file, 'w') as f:
+        json.dump(metadata, f)
     return metadata
 
 def extract_metadata_from_filename(input_string):
@@ -140,3 +157,74 @@ def create_corpus(corpus_dir, doi_cache : DOICache=None) -> pd.DataFrame:
                         'author': author
                     })
     return pd.DataFrame(articles).sort_values(by='year').astype({'year':'Int64'})
+
+def create_cached_corpus(cache_id:str):
+    corpus_dir = os.getenv(f"{cache_id.upper()}_CORPUS_DIR")
+    if not os.path.exists(corpus_dir):
+        raise RuntimeError(f"Invalid corpus dir '{corpus_dir}'")
+    cache_file_path = f'cache/{cache_id}.pkl'
+    if not os.path.exists(cache_file_path):
+        doi_cache_file = f"data/{cache_id}-doi-to-year.csv"
+        doi_cache = DOICache(doi_cache_file) if os.path.exists(doi_cache_file) else None
+        articles_df = create_corpus(corpus_dir, doi_cache)
+        with open(cache_file_path, mode='wb') as f:
+            pickle.dump(articles_df, f)
+    else:
+        with open(cache_file_path, mode='rb') as f:
+            articles_df = pickle.load(f)
+    return articles_df
+
+def df_to_html(df, file=None):
+
+    """
+    Generate (and optionally save) a Jupyter like html of pandas dataframe
+    Adapted from https://github.com/ljmartin/df_to_svg/blob/main/code/write_html.ipynb
+    """
+
+    styles = [
+        #table properties
+        dict(selector=" ",
+             props=[("margin","0"),
+                    ("font-family",'"Helvetica", "Arial", sans-serif'),
+                    ("border-collapse", "collapse"),
+                    ("border","none"),
+                    #("border", "2px solid #ccf") #border looks bad
+                    ]),
+
+        #header color - optional
+        #     dict(selector="thead",
+        #          props=[("background-color","#cc8484")
+        #                ]),
+
+        #background shading
+        dict(selector="tbody tr:nth-child(even)",
+             props=[("background-color", "#fff")]),
+        dict(selector="tbody tr:nth-child(odd)",
+             props=[("background-color", "#eee")]),
+
+        #cell spacing
+        dict(selector="td",
+             props=[("padding", ".5em")]),
+
+        #header cell properties
+        dict(selector="th",
+             props=[("font-size", "100%"),
+                    ("text-align", "center")]),
+    ]
+    html = (df.style.set_table_styles(styles)).to_html()
+    html = f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+</head>
+<body>
+{html}
+</body>
+</html>
+    """
+    if file:
+        with open(file, 'w', encoding='utf-8') as b:
+            b.write(html)
+    return display(HTML(html))

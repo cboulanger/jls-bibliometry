@@ -1,25 +1,39 @@
 import os, json, re
 from py2neo import Graph, Path, Node, Relationship, walk
 from pyvis.network import Network
-from IPython.display import display, HTML
+from IPython.display import display, HTML, Image
 from typing import Union
 from textwrap import shorten
+import subprocess
 
+
+def strip_property_prefix(input_dict, prefix):
+    output_dict = {}
+    for key, value in input_dict.items():
+        if key.startswith(prefix):
+            new_key = key[len(prefix):]
+        else:
+            new_key = key
+        output_dict[new_key] = value
+    return output_dict
 
 def py2neo_to_pyvis(net: Network,
                     obj: Union[Path, Node, Relationship],
                     auto_rel_label=False,
-                    edge_default_width=3):
+                    edge_default_width=3,
+                    font_default_size=20):
     if type(obj) is Path:
         for o in walk(obj):
             py2neo_to_pyvis(net, o)
     elif type(obj) is Node:
-        if obj['label'] is None or obj['label'] == "":
-            label = obj['display_name'] or obj['title'] or obj['name'] or obj['id'] or ''
-            label = shorten(label, width=50, placeholder="...").replace(':', ':\n')
-            obj['label'] = label
-        obj['group'] = obj['group'] or str(obj.labels)
-        net.add_node(obj.identity, font={'size': 20}, **obj)
+        p = strip_property_prefix(dict(obj), "vis_")
+        label = p.get('label') or p.get('display_name') or p.get('title') or p.get('name') or p.get('id') or ''
+        p['label'] = shorten(label, width=50, placeholder="...").replace(':', ':\n')
+        if 'group' not in p or p['group'] is None:
+            p['group'] = str(obj.labels)
+        if 'font' not in p or p['font'] is None:
+            p['font'] = {'size': font_default_size}
+        net.add_node(obj.identity, **p)
     elif issubclass(type(obj), Relationship):
         start_node = obj.start_node
         end_node = obj.end_node
@@ -30,15 +44,16 @@ def py2neo_to_pyvis(net: Network,
         py2neo_to_pyvis(net, start_node)
         py2neo_to_pyvis(net, end_node)
         neo4j_label = type(obj).__name__
-        if obj['title'] is None:
-            obj['title'] = neo4j_label
-        if obj['label'] is None:
-            obj['label'] = (neo4j_label if auto_rel_label else None)
-        if obj['group'] is None:
-            obj['group'] = str(obj.labels)
-        if obj['width'] is None:
-            obj['width'] = edge_default_width
-        net.add_edge(start_node.identity, end_node.identity, **obj)
+        p = strip_property_prefix(dict(obj), "vis_")
+        if 'title' not in p or p['title'] is None:
+            p['title'] = neo4j_label
+        if 'label' not in p or p['label'] is None:
+            p['label'] = (neo4j_label if auto_rel_label else None)
+        if 'group' not in p or p['group'] is None:
+            p['group'] = neo4j_label
+        if 'width' not in p or p['width'] is None:
+            p['width'] = edge_default_width
+        net.add_edge(start_node.identity, end_node.identity, **p)
 
 
 def create_or_update_network(graph: Graph,
@@ -137,9 +152,11 @@ def draw_network(net: Network,
                  title: str = None,
                  caption: str = None,
                  file: str = None,
+                 screenshot = False,
                  url: str = None,
                  prev_url: str = None,
                  next_url: str = None,
+                 show_nav_bar: bool = True,
                  show_slider: bool = False,
                  min_edge_value: int = None,
                  show_physics_toggle: bool = False,
@@ -155,41 +172,49 @@ def draw_network(net: Network,
     if caption is not None:
         html = html.replace("</body>", f'\n<div style="text-align:center; text-wrap: balance">{caption}</div>\n</body>')
     # navigation bar
-    nav_bar = '<div style="text-align:center">'
-    if caption:
-        nav_bar = "<hr/>" + nav_bar
-    # optional: back and forward links
-    if prev_url or next_url:
-        if prev_url:
-            nav_bar += f'<a href="{prev_url}">Previous</a>'
+    if show_nav_bar:
+        nav_bar = '<div style="text-align:center">'
+        if caption:
+            nav_bar = "<hr/>" + nav_bar
+        # optional: back and forward links
+        if prev_url or next_url:
+            if prev_url:
+                nav_bar += f'<a href="{prev_url}">Previous</a>'
+                nav_bar += '&nbsp;| '
+            if next_url:
+                nav_bar += f'<a href="{next_url}">Next</a>'
+                nav_bar += '&nbsp;| '
+        if show_slider is not None:
+            nav_bar += '<datalist id="steplist"></datalist>'
+            nav_bar += 'Minimum citations:&nbsp;<span id="sliderValue" style="width: 30px;display: inline-block;"></span>&nbsp;'
+            nav_bar += '<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>'
             nav_bar += '&nbsp;| '
-        if next_url:
-            nav_bar += f'<a href="{next_url}">Next</a>'
-            nav_bar += '&nbsp;| '
-    if show_slider is not None:
-        nav_bar += '<datalist id="steplist"></datalist>'
-        nav_bar += 'Minimum citations:&nbsp;<span id="sliderValue" style="width: 30px;display: inline-block;"></span>&nbsp;'
-        nav_bar += '<input style="width:200px" type="range" class="slider" id="edgeValueSlider" list="steplist"></input>'
-        nav_bar += '&nbsp;| '
-    # optional: show checkbox to toggle physics
-    if show_physics_toggle == True:
-        nav_bar += 'Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })">'
-    nav_bar += '</div>'
-    if show_slider is not None:
-        nav_bar += f'\n<script>{generate_script(min_edge_value)}</script>'
-    html = html.replace("</body>", f'\n{nav_bar}\n</body>')
+        # optional: show checkbox to toggle physics
+        if show_physics_toggle == True:
+            nav_bar += 'Enable physics:&nbsp;<input type="checkbox" checked onchange="network.setOptions({ physics: this.checked })">'
+        nav_bar += '</div>'
+        if show_slider is not None:
+            nav_bar += f'\n<script>{generate_script(min_edge_value)}</script>'
+        html = html.replace("</body>", f'\n{nav_bar}\n</body>')
+
     # optional: save to file
     if file is not None:
         if file.endswith(".html"):
             with open(file, mode="w", encoding="utf-8") as f:
                 f.write(html)
+            if screenshot:
+                result = subprocess.run(['python', 'scripts/save-screenshot.py', file, "10"], stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
+                error = result.stderr.decode('utf-8')
+                if error != "":
+                    raise RuntimeError(error)
         else:
             raise RuntimeError("Unsupported file extension")
     # optional: return a link only
     if link_only and url:
-        display(HTML(f'<a href="{url}" target="_blank">Click here to open {os.path.basename(file)}.</a>'))
-    elif link_only and file:
-        display(HTML(f'<a href="{file}" target="_blank">Click here to open {os.path.basename(file)}.</a>'))
+        display(HTML(f'Open graph at <a href="{url}" target="_blank">{url}.</a>'))
+    elif file and screenshot:
+        display(Image(filename=file.replace('.html', '.png')))
     else:
         display(HTML(html))
 
@@ -217,10 +242,12 @@ def create_timeseries(graph: Graph,
                       file_id: str,
                       title: str = None,
                       caption: str = None,
+                      screenshot = False,
                       seed: int = 5,
                       min_edge_value: int = None,
                       url: str = None,
                       file_prefix: str = "",
+                      show_nav_bar: bool = True,
                       show_slider: bool = True,
                       show_physics_toggle: bool = True,
                       start_year=1974,
@@ -234,11 +261,25 @@ def create_timeseries(graph: Graph,
         net = create_or_update_network(graph, query, height="600", seed=seed,
                                        year_start=decade_start, year_end=decade_end)
         file = f"{file_id}-{decade_start}-{decade_end}.html"
+        prev_url = next_url = graph_url = None
         if url is not None:
-            url = f"{url}/{file}"
+            graph_url = f"{url}/{file}"
             prev_url = f"{file_id}-{decade_start - 10}-{decade_start - 1}.html" if i > 0 else None
             next_url = f"{file_id}-{decade_end + 1}-{decade_end + 10}.html" if i < (num_ranges - 1) else None
         draw_network(net, title=f"{title}, {decade_start} - {decade_end}", caption=caption,
-                     prev_url=prev_url, next_url=next_url,
-                     file=f"{file_prefix}{file}", url=url, link_only=True, min_edge_value=min_edge_value,
+                     prev_url=prev_url, next_url=next_url, screenshot=screenshot, link_only=not screenshot,
+                     file=f"{file_prefix}{file}", url=graph_url, min_edge_value=min_edge_value, show_nav_bar=show_nav_bar,
                      show_slider=show_slider, show_physics_toggle=show_physics_toggle)
+
+def cleanup(graph: Graph):
+    # remove styling properties from nodes and relationships
+    graph.run("""
+        MATCH (n) WHERE any(key IN keys(n) WHERE key STARTS WITH 'vis_')
+        WITH n, [key IN keys(n) WHERE key STARTS WITH 'vis_'] AS keys
+        CALL apoc.create.removeProperties(n, keys) YIELD node RETURN node;
+    """)
+    graph.run("""
+        MATCH ()-[r]-() WHERE any(key IN keys(r) WHERE key STARTS WITH 'vis_')
+        WITH r, [key IN keys(r) WHERE key STARTS WITH 'vis_'] AS keys
+        CALL apoc.create.removeRelProperties(r, keys) YIELD rel RETURN rel;
+    """)
