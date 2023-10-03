@@ -1,109 +1,44 @@
-# NOTE: This code is published as documentation on how the author-gender timeseries was produced.
-# It is NOT working as-is.
-
 #devtools::install_github("kalimu/genderizeR")
 library(neo4r)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(genderizeR)
+library(stringr)
+
+parse_dotenv <- function(filepath=".env") {
+  lines <- readLines(filepath, warn = FALSE)
+  env_vars <- list()
+  for (line in lines) {
+    if (grepl("^#", line) || grepl("^$", line)) { next }
+    kv <- strsplit(line, "=")[[1]]
+    key <- kv[1]
+    value <- kv[2]
+    value <- sub("^['\"]", "", value)
+    value <- sub("['\"]$", "", value)
+    for (var_name in names(env_vars)) {
+      value <- gsub(paste0("\\$", var_name), env_vars[[var_name]], value)
+      value <- gsub(paste0("\\$\\{", var_name, "\\}"), env_vars[[var_name]], value)
+    }
+    env_vars[[key]] <- value
+  }
+  return(env_vars)
+}
 
 getNeo4jConnection <- function(){
+  config <- parse_dotenv()
   neo4j_api$new(
-    url = "http://localhost:7474",
-    user = "neo4j",
-    password = "neo4j_local"
+    #url = paste0('http://', config$NEO4J_HOST, ':', config$NEO4J_HTTP_PORT),
+    url = 'http://localhost:7474',
+    user = config$NEO4J_USERNAME,
+    password = config$NEO4J_PASSWORD
   )
 }
 
-main <- function() {
-  neo4j_query <- '
-  match (a:Author)-[:CREATOR_OF]->(w:Work)-[:PUBLISHED_IN]->(v:Venue)
-  where v.id = "j law soc"
-  return a.family, a.given, w.year
-  '
-  neo4j_result <- call_neo4j(neo4j_query, getNeo4jConnection(), type="row")
-  
-  # transform in a format that we can work with, clean up garbage years
-  articles <- data.frame(t(neo4j_result)) |>
-    rename(last_name=value, first_name=value.1, year=value.2) |>
-    filter(year >= 1974)
-  
-  authors_full_name <- articles |>
-    select(last_name, first_name) |> 
-    unique() |> 
-    arrange(last_name) |>
-    filter(stringr::str_length(first_name)>2 & !grepl("\\.",first_name))
-
-  given_names <- authors_full_name |>
-    select(first_name) |>
-    unique() |>
-    arrange(first_name)
-  
-  given_names_db <- given_names |>
-    genderizeR::findGivenNames() |> # this sends requests to external API with rate limits
-    unique() # for some reason, there are duplicates in the result
-  
-  save(given_names_db, file="jls-names-gender.Rdata")
-  
-  first_names_gender <- genderize(authors_full_name, genderDB = given_names_db,)
-  
-}
 
 
-
-##
-## (Re-)generate file containing gender analysis of first names for batch
-## processing where gender info is missing in reconciled data
-##
-# https://github.com/kalimu/genderizeR
-
-createFirstNameGenderTable <- function() {
-  first_names <- unique(select(authors, first_name))
-  first_names_sorted <- sort(first_names$first_name)
-  given_names <- findGivenNames(first_names_sorted)
-  first_names_gender <- genderize(first_names_sorted, genderDB = given_names)
-  save(first_names_gender, file="first-names-gender.Rdata")
-  first_names_gender
-}
-
-## 
-## Add gender info to author data
-##
-addGenderInfo <- function(authors) {
-  for (row in seq_len(nrow(authors))) {
-    author <- authors[row, "full_name"]
-    auth_rec_row <- which(auth_rec[,1] == author)
-    # gender 
-    gender <- (auth_rec[auth_rec_row, "Geschlecht"])
-    if (isTRUE(!is.null(gender) && !is.na(gender))) {
-      if (gender == "Männlich") {
-        gender <- "male"
-      } else if (gender == "Weiblich") {
-        gender <- "female"
-      } else {
-        gender <- NA
-      }
-    } else {
-      gender <- NA
-    }
-    
-    if (isTRUE(is.na(gender))) {
-      first_names_gender_row <- which(first_names_gender[,"text"] == authors[row, "first_name"])
-      if (!is.null(first_names_gender_row)) {
-        gender <- (first_names_gender[first_names_gender_row, "gender"])
-        auth_rec[auth_rec_row, "Geschlecht"] <- if (isTRUE(gender == "male")) "Männlich" else if (isTRUE(gender == "female")) "Weiblich" else ""
-      }
-    }
-    authors[row, "gender"] <- gender
-    #print(paste(author, gender, sep=": "))
-  }
-  authors
-}
-
-plotAuthorsGenderTimeseries <- function(articles) {
-  gender_by_year <- articles %>%
-    mutate(year = format(date, "%Y")) %>% 
+plotAuthorsGenderTimeseries <- function(year_gender) {
+  gender_by_year <- year_gender %>%
     group_by(year) %>% 
     count(gender) %>% 
     pivot_wider(names_from = gender, values_from = n, values_fill=0)
@@ -135,6 +70,52 @@ plotAuthorsGenderTimeseries <- function(articles) {
     ) +
     theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), 
           axis.text.y.right = element_text(color = "red")) +
-    labs(x="Year", y="Articles", fill='Gender')
+    labs(x="Year", y="Number of articles", fill='Gender')
+  ggsave("docs/article-fig-06.png", dpi=600, width = 10)
   p
 }
+
+if (!exists("author_year")) {
+  # transform in a format that we can work with, clean up garbage years and duplicates
+  author_year <- read.csv("data/jls-author-year.csv", encoding = "UTF-8") |>
+    separate_rows(author, sep = ";") |>
+    mutate(author = str_to_lower(str_trim(author))) |>
+    separate(author, into = c("first_name", "last_name"), sep = "(?<= )(?=[^ ]+$)", remove = TRUE) |>
+    mutate(across(c(first_name, last_name), str_trim))
+}
+if (!exists("given_names_db")) {
+  row_names <- c('count','name','gender','probability','country_id')
+
+  if (file.exists("data/jls-names-gender.Rdata")) {
+    load("data/jls-names-gender.Rdata")
+  } else {
+    given_names_db <- data.frame(matrix(ncol = length(row_names), nrow = 0))
+    colnames(given_names_db) <- row_names
+  }
+
+  missing_names <- author_year |>
+    filter(!first_name %in% given_names_db$name &
+             !str_detect(first_name, "^\\s*([a-zA-Z]\\.\\s*)+$")) |>
+    pull(first_name)
+
+  if (length(missing_names) > 0) {
+    missing_given_names_db <- genderizeR::findGivenNames(missing_names)
+    colnames(missing_given_names_db) <- row_names # fix wrong column names
+    given_names_db <- rbind(given_names_db, missing_given_names_db)
+  }
+  save(given_names_db, file = "data/jls-names-gender.Rdata")
+}
+
+if (!exists("first_names_gender")) {
+  first_names_gender <- author_year |>
+    filter(!is.na(first_name)) |>
+    distinct(first_name) |>
+    pull(first_name) |>
+    genderizeR::genderize(genderDB = given_names_db,)
+}
+
+author_year |>
+  merge(first_names_gender, by.x="first_name", by.y="givenName") |>
+  plotAuthorsGenderTimeseries()
+
+

@@ -5,8 +5,8 @@ import pandas as pd
 
 def prepare_data(articles_df, regex_list, column='text'):
     data = []
-
-    for regex in regex_list.reverse():
+    regex_list.reverse()
+    for regex in regex_list:
         for year, year_df in articles_df.groupby('year'):
             total_word_count = year_df[column].apply(lambda x: len(x.split())).sum()
             count = year_df[column].apply(lambda x: len(re.findall(regex, x))).sum()
