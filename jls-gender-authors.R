@@ -6,6 +6,7 @@ library(ggplot2)
 library(genderizeR)
 library(stringr)
 
+# parse a .env file including variable expansion
 parse_dotenv <- function(filepath=".env") {
   lines <- readLines(filepath, warn = FALSE)
   env_vars <- list()
@@ -25,8 +26,8 @@ parse_dotenv <- function(filepath=".env") {
   return(env_vars)
 }
 
-getNeo4jConnection <- function(){
-  config <- parse_dotenv()
+# not currently used
+getNeo4jConnection <- function(config){
   neo4j_api$new(
     #url = paste0('http://', config$NEO4J_HOST, ':', config$NEO4J_HTTP_PORT),
     url = 'http://localhost:7474',
@@ -35,9 +36,60 @@ getNeo4jConnection <- function(){
   )
 }
 
+get_author_year <- function(filename) {
+  read.csv(filename, encoding = "UTF-8") |>
+    filter(!is.na(author)) |>
+    filter(author != "") |>
+    separate_rows(author, sep = ";") |>
+    mutate(author = str_to_lower(str_trim(author))) |>
+    separate(author, into = c("first_name", "last_name"), sep = "(?<= )(?=[^ ]+$)", remove = TRUE) |>
+    mutate(across(c(first_name, last_name), str_trim))
+}
 
+get_given_names_db <- function(author_year, api_key) {
+  row_names <- c('count','name','gender','probability','country_id')
 
-plotAuthorsGenderTimeseries <- function(year_gender) {
+  if (file.exists("data/jls-names-gender.Rdata")) {
+    load("data/jls-names-gender.Rdata")
+  }
+
+  if (exists("given_names_db")) {
+    missing_names <- author_year |>
+      filter(!first_name %in% given_names_db$name &
+               !str_detect(first_name, "^\\s*([a-zA-Z]\\.\\s*)+$")) |>
+      pull(first_name)
+  } else {
+    missing_names <- author_year$first_name
+  }
+
+  if (!exists("given_names_db") || length(missing_names) > 0) {
+    missing_given_names_db <- genderizeR::findGivenNames(missing_names, apikey = api_key)
+    colnames(missing_given_names_db) <- row_names # fix wrong column names
+    if (exists("given_names_db")) {
+      given_names_db <- rbind(given_names_db, missing_given_names_db)
+    } else {
+      given_names_db <- missing_given_names_db
+    }
+    save(given_names_db, file = "data/jls-names-gender.Rdata")
+  }
+  given_names_db
+}
+
+get_author_year_gender <- function(author_year, given_names_db) {
+  first_names_gender <- author_year |>
+    filter(!is.na(first_name)) |>
+    distinct(first_name) |>
+    pull(first_name) |>
+    genderizeR::genderize(genderDB = given_names_db,)
+
+  author_year |>
+    merge(first_names_gender, by.x="first_name", by.y="givenName") |>
+    select(last_name, first_name, year, gender) |>
+    arrange(last_name, first_name, year) |>
+    unique()
+}
+
+plotAuthorsGenderTimeseries <- function(year_gender, filename, title) {
   gender_by_year <- year_gender %>%
     group_by(year) %>% 
     count(gender) %>% 
@@ -48,7 +100,7 @@ plotAuthorsGenderTimeseries <- function(year_gender) {
 
   p <- gender_by_year[, 1:3] %>% pivot_longer(-year) %>% 
     ggplot(aes(x=year,y=value,fill=name)) +
-    ggtitle("Articles published with gender distribution") + 
+    ggtitle(title) +
     geom_bar(stat = 'identity') +
     geom_line(
       data = gender_by_year[,-2:-4], 
@@ -71,51 +123,19 @@ plotAuthorsGenderTimeseries <- function(year_gender) {
     theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), 
           axis.text.y.right = element_text(color = "red")) +
     labs(x="Year", y="Number of articles", fill='Gender')
-  ggsave("docs/article-fig-06.png", dpi=600, width = 10)
+  ggsave(filename, dpi=600, width = 10)
   p
 }
 
-if (!exists("author_year")) {
-  # transform in a format that we can work with, clean up garbage years and duplicates
-  author_year <- read.csv("data/jls-author-year.csv", encoding = "UTF-8") |>
-    separate_rows(author, sep = ";") |>
-    mutate(author = str_to_lower(str_trim(author))) |>
-    separate(author, into = c("first_name", "last_name"), sep = "(?<= )(?=[^ ]+$)", remove = TRUE) |>
-    mutate(across(c(first_name, last_name), str_trim))
-}
-if (!exists("given_names_db")) {
-  row_names <- c('count','name','gender','probability','country_id')
+config <- parse_dotenv()
+given_names_db <- get_given_names_db(author_year, config$GENDERIZER_API_KEY)
 
-  if (file.exists("data/jls-names-gender.Rdata")) {
-    load("data/jls-names-gender.Rdata")
-  } else {
-    given_names_db <- data.frame(matrix(ncol = length(row_names), nrow = 0))
-    colnames(given_names_db) <- row_names
-  }
+jls <- get_author_year("data/jls-author-year.csv") |>
+  get_author_year_gender(given_names_db = given_names_db)
+plotAuthorsGenderTimeseries(jls, "docs/article-fig-06.png",
+                              "Journal of Law and Society - Gender of article authors")
 
-  missing_names <- author_year |>
-    filter(!first_name %in% given_names_db$name &
-             !str_detect(first_name, "^\\s*([a-zA-Z]\\.\\s*)+$")) |>
-    pull(first_name)
-
-  if (length(missing_names) > 0) {
-    missing_given_names_db <- genderizeR::findGivenNames(missing_names)
-    colnames(missing_given_names_db) <- row_names # fix wrong column names
-    given_names_db <- rbind(given_names_db, missing_given_names_db)
-  }
-  save(given_names_db, file = "data/jls-names-gender.Rdata")
-}
-
-if (!exists("first_names_gender")) {
-  first_names_gender <- author_year |>
-    filter(!is.na(first_name)) |>
-    distinct(first_name) |>
-    pull(first_name) |>
-    genderizeR::genderize(genderDB = given_names_db,)
-}
-
-author_year |>
-  merge(first_names_gender, by.x="first_name", by.y="givenName") |>
-  plotAuthorsGenderTimeseries()
-
-
+sls <- get_author_year("data/sls-author-year.csv") |>
+  get_author_year_gender(given_names_db = given_names_db)
+plotAuthorsGenderTimeseries(sls, "docs/sls-author-gender.png",
+                              "Social & Legal Studies - Gender of article authors")
