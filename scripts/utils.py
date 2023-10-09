@@ -7,10 +7,10 @@ import csv
 from py2neo import Graph
 import os
 import pickle
-from dotenv import load_dotenv
 from IPython.display import display, HTML
 import time
 
+from dotenv import load_dotenv
 load_dotenv()
 
 def get_graph(name):

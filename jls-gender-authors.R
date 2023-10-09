@@ -89,7 +89,7 @@ get_author_year_gender <- function(author_year, given_names_db) {
     unique()
 }
 
-plotAuthorsGenderTimeseries <- function(year_gender, filename, title) {
+plotAuthorsGenderTimeseries <- function(year_gender, filename, title, year_steps = 5) {
   gender_by_year <- year_gender %>%
     group_by(year) %>% 
     count(gender) %>% 
@@ -97,6 +97,9 @@ plotAuthorsGenderTimeseries <- function(year_gender, filename, title) {
   gender_by_year$sum <- rowSums(gender_by_year[2:3])
   max_num_articles <- max(gender_by_year$sum)
   gender_by_year$female_percent <- as.numeric(gender_by_year$female/(gender_by_year$male+gender_by_year$female) * max_num_articles)
+
+  breaks_years <- seq(min(gender_by_year$year), max(gender_by_year$year))
+  breaks_years <- breaks_years[breaks_years %% year_steps == 0]
 
   p <- gender_by_year[, 1:3] %>% pivot_longer(-year) %>% 
     ggplot(aes(x=year,y=value,fill=name)) +
@@ -120,6 +123,7 @@ plotAuthorsGenderTimeseries <- function(year_gender, filename, title) {
         labels = function(b) { paste0(round(b * 100, 0), "%")}
       ) 
     ) +
+    scale_x_continuous(breaks = breaks_years) +
     theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), 
           axis.text.y.right = element_text(color = "red")) +
     labs(x="Year", y="Number of articles", fill='Gender')
@@ -130,12 +134,24 @@ plotAuthorsGenderTimeseries <- function(year_gender, filename, title) {
 config <- parse_dotenv()
 given_names_db <- get_given_names_db(author_year, config$GENDERIZER_API_KEY)
 
-jls <- get_author_year("data/jls-author-year.csv") |>
+# data was downloaded from constellate.org
+
+jls <- get_author_year("data/jls-author-year-constellate.csv") |>
   get_author_year_gender(given_names_db = given_names_db)
 plotAuthorsGenderTimeseries(jls, "docs/article-fig-06.png",
-                              "Journal of Law and Society - Gender of article authors")
+                              "Journal of Law and Society - Gender of article authors (Source: constellate.org")
+
+jls2 <- get_author_year("data/jls-author-year-openalex.csv") |>
+  get_author_year_gender(given_names_db = given_names_db)
+plotAuthorsGenderTimeseries(jls, "docs/article-fig-06.png",
+                            "Journal of Law and Society - Gender of article authors (Source: openalex.org)")
 
 sls <- get_author_year("data/sls-author-year.csv") |>
   get_author_year_gender(given_names_db = given_names_db)
 plotAuthorsGenderTimeseries(sls, "docs/sls-author-gender.png",
                               "Social & Legal Studies - Gender of article authors")
+
+ijlc <- get_author_year("data/ijlc-author-year.csv") |>
+  get_author_year_gender(given_names_db = given_names_db)
+plotAuthorsGenderTimeseries(sls, "docs/ijlc-author-gender.png",
+                            "International Journal of Law and Context - Gender of article authors")
