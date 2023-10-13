@@ -1,4 +1,5 @@
 # see also https://www.r-bloggers.com/2019/06/interactive-network-visualization-with-r/
+# todo: statistical validation of results: https://cran.r-project.org/web/packages/robin/vignettes/robin.html
 
 library(igraph)
 library(tidyr)
@@ -17,25 +18,27 @@ library(dplyr)
 # configuraion
 min_year <- 0
 min_all_years <- 5
-ignore_journals <- c('Sustainability',
-                     'Choice Reviews Online',
-                     'RePEc: Research Papers in Economics',
-                     "DOAJ (DOAJ: Directory of Open Access Journals)")
+louvain_cluster_resolution <- 1
+ignore_journals <- c('sustainability',
+                     'choice reviews online',
+                     'repec: research papers in economics',
+                     "doaj (doaj: directory of open access journals)")
 # data source
 journal_id <- "jls"
-data_vendor <- "openalex"
+data_vendor <- "wos"
 data_file <- paste0("data/", journal_id, "-journal-network-", data_vendor, ".csv")
 
 # dataframe with columns source_title1, source_title2, count_citations
-df <- read.csv(data_file)
-
-# remove self-citations
-df <- df |>
-  filter(!(source_title_citing %in% ignore_journals) & !(source_title_cited %in% ignore_journals)) |>
+df <- read.csv(data_file) |>
+  # remove journals that have a high citation rate but are not relevant for our question
+  filter(!(str_to_lower(source_title_citing) %in% ignore_journals) &
+           !(str_to_lower(source_title_cited) %in% ignore_journals)) |>
+  # remove self-citations
   filter(source_title_citing != source_title_cited) |>
+  # remove journals which do not meet a minimum of citations per year
   filter(count_citations >= min_year)
 
-# Calculate total citations made by each journal per year and normalized weight
+# Calculate total citations made by each journal per year and compute normalized weight
 citing_totals_per_year <- df |>
   group_by(source_title_citing, citation_year) |>
   summarise(total_citing = sum(count_citations))
@@ -45,8 +48,7 @@ df <- df |>
 
 # Create list of nodes with id and label
 all_nodes <- data.frame(label = unique(c(df$source_title_citing, df$source_title_cited))) |>
-  mutate(id=seq_along(label)) |>
-  select(id, label)
+  mutate(id=seq_along(label))
 
 # Create list of edges
 edges <- df |>
@@ -74,16 +76,17 @@ edges <- edges |>
     from = first(from),
     to = first(to),
     total_count = sum(count),
-    combined_median_weight = median(c(rep(median_weight, count))),
+    combined_weight = median(weight, na.rm = TRUE),
     label_AB = sum(if(from < to) count else 0),  # A->B
     label_BA = sum(if(from > to) count else 0)   # B->A
   ) |>
   # Create the desired label and weight
   mutate(
     label = paste(label_AB, "/", label_BA),
-    weight = combined_median_weight
+    weight = combined_weight,
+    size = combined_weight * 10
   ) |>
-  select(from, to, label, weight)
+  select(from, to, label, weight, size)
 
 # Filter out nodes without edges
 edges_node_ids <- unique(c(edges$from, edges$to))
@@ -99,7 +102,7 @@ largest_comp_id <- which.max(comps$csize)
 graph <- induced_subgraph(graph, which(comps$membership == largest_comp_id))
 
 # Louvain Comunity Detection
-cluster <- cluster_louvain(graph)
+cluster <- cluster_louvain(graph, resolution = louvain_cluster_resolution)
 cluster_groups <- membership(cluster)
 cluster_df <- tibble(group=cluster_groups) |>
   mutate(id = as.integer(row_number())) |>
