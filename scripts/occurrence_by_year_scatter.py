@@ -7,10 +7,18 @@ def prepare_data(articles_df, regex_list, column='text'):
     data = []
     regex_list.reverse()
     for regex in regex_list:
+        if type(regex) is tuple:
+            term, regex = regex
+        else:
+            term = regex
         for year, year_df in articles_df.groupby('year'):
             total_word_count = year_df[column].apply(lambda x: len(x.split())).sum()
             count = year_df[column].apply(lambda x: len(re.findall(regex, x))).sum()
-            data.append({'year': year, 'term': regex, 'count': count, 'total_word_count': total_word_count})
+            data.append({'year': year,
+                         'term': term,
+                         'count': count,
+                         'regex': regex,
+                         'total_word_count': total_word_count})
 
     aggregated = pd.DataFrame(data)
     return aggregated
@@ -27,7 +35,7 @@ def print_occurences(data_frame, regex_list):
     print("\n".join(output_list))
 
 
-def plot_by_year(data, dep_col='term',
+def plot_by_year(data, dep_col='term', col_search_term='regex',
                  title= None, x_label=None, y_label=None, y_axis_limit=None,
                  file=None, dpi=300, scale_factor=300, color='darkblue'):
     years = data['year'].values
@@ -55,6 +63,16 @@ def plot_by_year(data, dep_col='term',
 
     # Scatter plot with scaled relative frequencies as size
     ax.scatter(years, dep_var, s=scaled_relative_frequencies, color=color, zorder=2)
+
+    # Annotate with the search term (right-aligned, half-size of labels, in grey)
+    # if col_search_term in data.columns:
+    #     annotated_terms = set()  # Keep track of terms that have been annotated
+    #     for y, term, search_term in zip(dep_var, data[dep_col], data[col_search_term]):
+    #         if term not in annotated_terms:
+    #             annotated_terms.add(term)
+    #             ax.annotate(search_term, (min(years), y), textcoords="offset points",
+    #                         xytext=(-10, 0), ha='right', fontsize='small', color='grey')
+
 
     # Connect the earliest and last point of each observed variable with a line
     for dep_v in set(dep_var):
