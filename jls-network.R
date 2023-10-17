@@ -14,6 +14,7 @@ library(gridExtra)
 library(htmlTable)
 library(htmltools)
 library(dplyr)
+library(htmltools)
 
 # configuraion
 min_year <- 0
@@ -25,8 +26,9 @@ ignore_journals <- c('sustainability',
                      "doaj (doaj: directory of open access journals)")
 # data source
 journal_id <- "jls"
-data_vendor <- "wos"
+data_vendor <- "openalex"
 data_file <- paste0("data/", journal_id, "-journal-network-", data_vendor, ".csv")
+result_file <- paste0("docs/", journal_id, "-journal-network-", data_vendor, ".html")
 
 # dataframe with columns source_title1, source_title2, count_citations
 df <- read.csv(data_file) |>
@@ -84,14 +86,16 @@ edges <- edges |>
   mutate(
     label = paste(label_AB, "/", label_BA),
     weight = combined_weight,
-    size = combined_weight * 10
+    size = combined_weight * 10,
+    value = total_count
   ) |>
-  select(from, to, label, weight, size)
+  select(from, to, label, weight, size, value)
 
 # Filter out nodes without edges
-edges_node_ids <- unique(c(edges$from, edges$to))
+edges_node_ids <- unique(c(edges$from, edges$to)) |> sort()
 filtered_nodes <- all_nodes |>
-  filter(id %in% edges_node_ids)
+  filter(id %in% edges_node_ids) |>
+  select(id, label)
 
 # Create undirected
 graph <- graph_from_data_frame(edges, vertices = filtered_nodes, directed = F)
@@ -176,6 +180,11 @@ vn <- visNetwork(vis_nodes, vis_edges, width = "100%", height = "1000px") |>
     )
   ) |>
   visInteraction(hideEdgesOnZoom=T, hideNodesOnDrag=T) |>
-  visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T),
-             selectedBy = "group", nodesIdSelection = TRUE) |>
-  visSave(paste0("docs/", journal_id, "-journal-network-", data_vendor, ".html"), selfcontained = T)
+  #visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T), selectedBy = "group") |>
+  visSave(result_file, selfcontained = T)
+
+# add searchbox html to page
+original_html <- readLines(result_file) |> paste(collapse = "\n")
+custom_html <- readLines("lib/vis-network-searchbox.html") |> paste(collapse = "\n")
+new_html <- gsub("<body([^>]*)>", paste0("\1\n", custom_html), original_html)
+writeLines(new_html, result_file)
