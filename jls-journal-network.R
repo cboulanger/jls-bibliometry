@@ -1,5 +1,4 @@
 # see also https://www.r-bloggers.com/2019/06/interactive-network-visualization-with-r/
-# todo: statistical validation of results: https://cran.r-project.org/web/packages/robin/vignettes/robin.html
 
 library(igraph)
 library(tidyr)
@@ -31,7 +30,7 @@ data_file <- paste0("data/", journal_id, "-journal-network-", data_vendor, ".csv
 result_file <- paste0("docs/", journal_id, "-journal-network-", data_vendor, ".html")
 
 # dataframe with columns source_title1, source_title2, count_citations
-df <- read.csv(data_file) |>
+df <- read.csv(data_file, encoding = "UTF-8") |>
   # remove journals that have a high citation rate but are not relevant for our question
   filter(!(str_to_lower(source_title_citing) %in% ignore_journals) &
            !(str_to_lower(source_title_cited) %in% ignore_journals)) |>
@@ -107,10 +106,9 @@ graph <- induced_subgraph(graph, which(comps$membership == largest_comp_id))
 
 # Louvain Comunity Detection
 cluster <- cluster_louvain(graph, resolution = louvain_cluster_resolution)
-cluster_groups <- membership(cluster)
-cluster_df <- tibble(group=cluster_groups) |>
-  mutate(id = as.integer(row_number())) |>
-  select(id, group)
+cluster_groups <- as.integer(membership(cluster))
+cluster_names <- as.integer(cluster$names)
+cluster_df <- tibble(id = cluster_names, group=cluster_groups)
 
 # create a purely illustrative plot of the communities:
 png_file <- paste0("docs/jls-journal-network-communities-graph-", data_vendor, ".png")

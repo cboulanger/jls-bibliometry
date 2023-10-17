@@ -1,8 +1,8 @@
 <input type="text" id="search-box" placeholder="Enter search term(s) divided by ';'" autocomplete="off">
 <br><select id="multi-select" multiple="multiple"></select>
 <datalist id="steplist"></datalist>
-<br><span id="sliderValue" style="width: 30px;display: inline-block;"></span>&nbsp;
-<input style="width:300px" type="range" class="slider" id="edge-value-slider" list="steplist"></input>
+<br><span id="slider-value" style="width: 30px;display: inline-block;">1</span>&nbsp;
+<input style="width:300px" type="range" class="slider" id="edge-value-slider" list="steplist" value="1"></input>
 <style>
     #search-box { width: 600px}
     #multi-select {
@@ -30,20 +30,6 @@
             multiSelect.appendChild(option);
         })
 
-        // the default slider value comes either from the "min_edge_value" query param,
-        // the local storage (to persist across pages), or a value passed to the script
-        const defaultValue = parseInt(new URLSearchParams(document.location.search).get('min_edge_value'))
-            || parseInt(window.localStorage.getItem(storageId)) || 0
-        updateSliderTicks(defaultValue)
-
-        // show the slider value
-        displaySliderValue()
-
-        // render the network
-        updateNetwork();
-
-        // UI event handling
-
         // filter options depending on user input
         const options = Array.from(multiSelect.options);
         searchBox.addEventListener("input", () => {
@@ -59,6 +45,7 @@
         let updateTimeout;
         multiSelect.addEventListener("change", () => {
             clearTimeout(updateTimeout)
+            slider.value = slider.min
             updateTimeout = setTimeout(updateNetwork, 500)
         });
 
@@ -68,12 +55,20 @@
         // and update the display
         slider.addEventListener('input', displaySliderValue)
 
+        // the default slider value comes either from the "min_edge_value" query param,
+        // the local storage (to persist across pages), or a value passed to the script
+        const defaultValue = parseInt(new URLSearchParams(document.location.search).get('min_edge_value'))
+        || parseInt(window.localStorage.getItem(storageId)) || 0
+        let max = updateSliderTicks()
+        slider.value = Math.min(defaultValue, max);
+        displaySliderValue()
+
         // doubleClick on nodes to expand neigboring nodes, not working
-        //network.on('doubleClick', expandNode);
+        network.on('doubleClick', expandNode);
 
         function displaySliderValue() {
             let value = slider.value;
-            document.getElementById("sliderValue").innerText = value
+            document.getElementById("slider-value").innerText = value
             window.localStorage.setItem(storageId, value);
         }
 
@@ -81,6 +76,8 @@
         function updateNetwork () {
             // show/hide edges based on value
             let sliderValue = Number(slider.value);
+            displaySliderValue()
+
             edgesToUpdate = edges.map(edge => ({
                 id: edge.id,
                 hidden: edge.value < sliderValue
@@ -101,7 +98,8 @@
             // remove those which are not selected in the select box, if a selection has been made
             const selectedIds = Array.from(multiSelect.selectedOptions)
                     .filter(option => option.style.display != "none")
-                    .map(option => option.value);
+                    .map(option => Number(option.value));
+
             if (selectedIds.length > 0) {
                 visibleNodeIds.forEach(id => {
                     if (!selectedIds.includes(id)) {
@@ -113,7 +111,7 @@
             // create a array of nodes to be updated
             const nodesToUpdate = nodes.get().map(node => ({
                 id: node.id,
-                hidden: !visibleNodeIds.has(String(node.id))
+                hidden: !visibleNodeIds.has(node.id)
             }));
 
             const visibleNodes = nodes.get().filter(node => !node.hidden)
@@ -124,7 +122,7 @@
             // Center the view around the remaining visible nodes
             if (visibleNodeIds.size > 0) {
                 network.fit({
-                    nodes: Array.from(visibleNodeIds).map(id => Number(id)),
+                    nodes: Array.from(visibleNodeIds),
                     animation: {
                         duration: 500,
                         easingFunction: 'easeInOutQuad'
@@ -134,10 +132,11 @@
         };
 
         // configure the slider ticks based on an arry of edges having a "value" property
-        function updateSliderTicks(defaultValue=0) {
+        // returns the max value of the edges
+        function updateSliderTicks() {
             // determine highest and lowest value of the visible edges
             let visibleEdges = edges.get().filter(edge => !edge.hidden);
-            let min = Math.min(...edges.get().map(edge => edge.value));
+            let min = 1;
             let max = Math.max(...edges.get().map(edge => edge.value));
             // dynamically determine the slider options (=ticks)
             let steps = [1, 2, 5, 10, 25, 50, 100, 500, 1000];
@@ -170,29 +169,50 @@
                 option.value = Math.max(i,min);
                 datalist.appendChild(option);
             }
-            const value = Math.min(defaultValue, max);
-            slider.value = value;
+            return max;
+        }
+
+        function fitNetwork(nodes) {
+            network.fit({
+                nodes,
+                animation: {
+                    duration: 500,
+                    easingFunction: 'easeInOutQuad'
+                }
+            });
         }
 
         function expandNode(params) {
-            // Check if a node was double-clicked
             if (params.nodes.length > 0) {
-                const nodeId = params.nodes[0];  // Get the ID of the clicked node
-                // Find neighboring nodes
-                const connectedNodes = network.getConnectedNodes(nodeId).map(id => Number(id));
+                const nodeId = params.nodes[0];
+
+                // Get connected nodes and edges
+                const connectedNodes = network.getConnectedNodes(nodeId)
+                    .map(id => Number(id));
+                const connectedEdges = network.getConnectedEdges(nodeId);
+
+                // Show connected nodes
                 if (connectedNodes.length > 0) {
-                    // Get the current 'hidden' state of the first neighboring node
-                    const firstNeighbor = nodes.get(connectedNodes[0]);
-                    const targetHiddenState = !firstNeighbor.hidden;
-                    // Set the 'hidden' property for all neighboring nodes to the target state
-                    connectedNodes.forEach(neighborId => {
-                        const node = nodes.get(neighborId);
-                        node.hidden = targetHiddenState;
-                        nodes.update(node);
+                    let nodesToUpdate = connectedNodes.map(neighborId => ({
+                        id: neighborId,
+                        hidden: false
+                    }));
+                    nodes.update(nodesToUpdate)
+                    //fitNetwork(nodesToUpdate)
+                }
+
+                // Show connected edges
+                if (connectedEdges.length > 0) {
+                    const edgesToUpdate = connectedEdges.map(edgeId => {
+                        const edge = edges.get(edgeId);
+                        edge.hidden = false;
+                        return edge;
                     });
+                    edges.update(edgesToUpdate);
                 }
             }
         }
+
     });
 </script>
 
