@@ -16,41 +16,61 @@ library(dplyr)
 library(htmltools)
 library(humaniformat)
 library(stringi)
+library(tools)
 
 # configuration
 min_year <- 0
 min_all_years <- 2
 louvain_cluster_resolution <- 1
 combine_edges <- F
+seed <- 11
 
 # data source
 journal_id <- "jls"
 data_vendor <- "openalex"
 data_file <- paste0("data/", journal_id, "-author-network-", data_vendor, ".csv")
 result_file <- paste0("docs/", journal_id, "-author-network-", data_vendor, ".html")
+graph_title <- paste0("JLS Author Network (Source: ", data_vendor, ")")
+graph_description <- "Data includes all citations to and from the Journal of Law and Society, 1985-2023."
 
-# dataframe with columns "citing_author","cited_author","pub_year","citation_count"
-df <- read.csv(data_file, encoding = "UTF-8") |>
-  # remove self-citations
-  filter(citing_author != cited_author) |>
-  # remove journals which do not meet a minimum of citations per year
-  filter(citation_count >= min_year)
-
-# openalex needs to reverse the names
 if (data_vendor == 'openalex') {
-  reverse_name <- function(name) {
+  # openalex needs to reverse the names
+  normalize_name <- function(name) {
     name_split <- stri_split_fixed(name, " ", simplify = TRUE)
     last_name <- name_split[length(name_split)]
     rest_of_name <- stri_join(name_split[1:(length(name_split) - 1)], collapse = " ")
     reversed_name <- stri_join(last_name, ", ", rest_of_name)
     return(reversed_name)
   }
-  df <- df |>
-    mutate(
-      citing_author = sapply(citing_author, reverse_name),
-      cited_author = sapply(cited_author, reverse_name)
-    ) |> arrange(citing_author)
+} else if (data_vendor == 'wos') {
+  # web of science: normalize to the last name and first initial
+  normalize_name <- function(name) {
+    name <- gsub("\\.", "", name)
+    name <- gsub(" +", " ", name)
+    components <- name |> trimws() |> tolower() |> strsplit(", ")
+    last_name <- components[[1]][1]
+    first_name <- components[[1]][2]
+    first_initial <- substr(first_name, 1, 1)
+    normalized_name <- paste0(toTitleCase(last_name), ", ", toupper(first_initial))
+    return(normalized_name)
+  }
 }
+
+# dataframe with columns "citing_author","cited_author","pub_year","citation_count"
+df <- read.csv(data_file, encoding = "UTF-8") |>
+  # remve empty entries
+  filter(!is.na(citing_author) & !is.na(cited_author)) |>
+  filter(citing_author != "" & cited_author != "") |>
+  # remove entries which do not meet a minimum of citations per year
+  filter(citation_count >= min_year) |>
+  mutate(
+    citing_author = sapply(citing_author, normalize_name),
+    cited_author = sapply(cited_author, normalize_name)
+  ) |>
+  # sort by citing author
+  arrange(citing_author) |>
+  # remove self-citations
+  filter(citing_author != cited_author)
 
 # Calculate total citations made by each journal per year
 citing_totals_per_year <- df |>
@@ -147,22 +167,19 @@ vn <- visNetwork(vis_nodes, vis_edges, width = "100%", height = "1000px") |>
   visNodes(
     shape = "dot",
     size = 30,
-    color = list(
-      background = "#0085AF",
-      border = "#013848",
-      highlight = "#FF8000"
-    ),
-    shadow = list(enabled = TRUE, size = 10)
+    shadow = FALSE
   ) |>
   visEdges(
     shadow = FALSE,
     arrows = "to",
-    smooth = list(type="continuous", roundness=0.7),
-    color = list(color = "#0085AF", highlight = "#C62F4B")
+    smooth = list(type="continuous", roundness=0.7)
   )  |>
-  visLayout(randomSeed = 11)  |>
+  visLayout(randomSeed = seed, improvedLayout = FALSE)  |>
   visPhysics(
+    enabled = T,
     solver = "forceAtlas2Based",
+    stabilization = F,
+    repulsion = list(nodeDistance = 300),
     barnesHut = list(
       gravitationalConstant = -50000,
       centralGravity = 0.3,
@@ -184,6 +201,10 @@ vn <- visNetwork(vis_nodes, vis_edges, width = "100%", height = "1000px") |>
 
 # add searchbox html to page
 original_html <- readLines(result_file) |> paste(collapse = "\n")
-custom_html <- readLines("lib/vis-network-searchbox.html") |> paste(collapse = "\n")
+custom_html <- readLines("lib/vis-network-searchbox.html") |>
+  lapply(\(line) gsub("\\$title", graph_title, line)) |>
+  lapply(\(line) gsub("\\$description", graph_description, line)) |>
+  paste(collapse = "\n")
+
 new_html <- gsub("<body([^>]*)>", paste0("\1\n", custom_html), original_html)
 writeLines(new_html, result_file)

@@ -1,3 +1,5 @@
+<h1>$title</h1>
+<p>$description</p>
 <input type="text" id="search-box" placeholder="Enter search term(s) divided by ';'" autocomplete="off">
 <br><select id="multi-select" multiple="multiple"></select>
 <datalist id="steplist"></datalist>
@@ -210,6 +212,14 @@
                     });
                     edges.update(edgesToUpdate);
                 }
+
+                // Temporarily enable physics
+                network.setOptions({ physics: true });
+
+                // Disable physics after stabilization
+                network.once("stabilized", function() {
+                    network.setOptions({ physics: false });
+                });
             }
         }
 
