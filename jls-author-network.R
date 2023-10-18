@@ -30,8 +30,11 @@ journal_id <- "jls"
 data_vendor <- "openalex"
 data_file <- paste0("data/", journal_id, "-author-network-", data_vendor, ".csv")
 result_file <- paste0("docs/", journal_id, "-author-network-", data_vendor, ".html")
-graph_title <- paste0("JLS Author Network (Source: ", data_vendor, ")")
-graph_description <- "Data includes all citations to and from the Journal of Law and Society, 1985-2023."
+graph_title <- paste0("JLS Author Network 1985-2023 (Source: ", data_vendor, ")")
+graph_description <- paste0("Data includes all citations to and from the Journal of Law and Society,
+ 1985-2023 as far as they exist in the ", data_vendor, " source data (which might be incomplete).
+ To keep the network readable, a citation relationship between two authors is shown only if there
+ are ", min_all_years, " or more citations over the time period.")
 
 if (data_vendor == 'openalex') {
   # openalex needs to reverse the names

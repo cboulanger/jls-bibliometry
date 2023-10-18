@@ -140,6 +140,21 @@
             let visibleEdges = edges.get().filter(edge => !edge.hidden);
             let min = 1;
             let max = Math.max(...edges.get().map(edge => edge.value));
+
+            // no need to update anything
+            if (slider.min == min && slider.max == max) {
+                return
+            }
+
+            // remove the datalist options
+            while (datalist.firstChild) {
+                datalist.removeChild(dataList.firstChild);
+            }
+
+            // configure the slider
+            slider.min = min;
+            slider.max = max;
+
             // dynamically determine the slider options (=ticks)
             let steps = [1, 2, 5, 10, 25, 50, 100, 500, 1000];
             let maxOptions = 10;
@@ -149,21 +164,6 @@
                 step = s;
                 if(Math.ceil(delta / s) <= maxOptions) break;
             }
-
-            // no need to update anything
-            if (slider.min == min && slider.max == max) {
-                return
-            }
-
-            // configure the slider
-            slider.min = min;
-            slider.max = max;
-
-            // remove the datalist options
-            while (datalist.firstChild) {
-                datalist.removeChild(dataList.firstChild);
-            }
-
             // Start from the nearest higher multiple of step
             let start = Math.floor(min / step) * step;
             for (let i = start; i <= max; i += step) {
