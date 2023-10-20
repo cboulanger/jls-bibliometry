@@ -17,6 +17,8 @@ library(htmltools)
 library(humaniformat)
 library(stringi)
 library(tools)
+library(svDialogs)
+
 
 # configuration
 min_year <- 0
@@ -27,7 +29,10 @@ seed <- 11
 
 # data source
 journal_id <- "jls"
-data_vendor <- "openalex"
+data_vendor <- dlg_list(list("wos","openalex","owndata"), multiple = FALSE)$res
+if (data_vendor=="") {
+  simpleError("No datasource given")
+}
 data_file <- paste0("data/", journal_id, "-author-network-", data_vendor, ".csv")
 result_file <- paste0("docs/", journal_id, "-author-network-", data_vendor, ".html")
 graph_title <- paste0("JLS Author Network 1985-2023 (Source: ", data_vendor, ")")
@@ -35,6 +40,8 @@ graph_description <- paste0("Data includes all citations to and from the Journal
  1985-2023 as far as they exist in the ", data_vendor, " source data (which might be incomplete).
  To keep the network readable, a citation relationship between two authors is shown only if there
  are ", min_all_years, " or more citations over the time period.")
+
+normalize_name <- function(name) { name }
 
 if (data_vendor == 'openalex') {
   # openalex needs to reverse the names
@@ -60,8 +67,8 @@ if (data_vendor == 'openalex') {
 }
 
 # dataframe with columns "citing_author","cited_author","pub_year","citation_count"
-df <- read.csv(data_file, encoding = "UTF-8") |>
-  # remve empty entries
+df <- read.csv(data_file, encoding = "UTF-8") |> head(5000) |>
+  # remve empty and invalid entries
   filter(!is.na(citing_author) & !is.na(cited_author)) |>
   filter(citing_author != "" & cited_author != "") |>
   # remove entries which do not meet a minimum of citations per year
@@ -200,10 +207,10 @@ vn <- visNetwork(vis_nodes, vis_edges, width = "100%", height = "1000px") |>
   ) |>
   visInteraction(hideEdgesOnZoom=T, hideNodesOnDrag=T) |>
   #visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T), selectedBy = "group") |>
-  visSave(result_file, selfcontained = T)
+  visSave('cache/last-vis-graph.html', selfcontained = T)
 
 # add searchbox html to page
-original_html <- readLines(result_file) |> paste(collapse = "\n")
+original_html <- readLines('cache/last-vis-graph.html') |> paste(collapse = "\n")
 custom_html <- readLines("lib/vis-network-searchbox.html") |>
   lapply(\(line) gsub("\\$title", graph_title, line)) |>
   lapply(\(line) gsub("\\$description", graph_description, line)) |>

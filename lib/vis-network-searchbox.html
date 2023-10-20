@@ -18,8 +18,8 @@
         const network = container.parentElement.chart
         const nodes = network.body.data.nodes;
         const edges = network.body.data.edges;
-        const multiSelect = document.getElementById("multi-select");
         const searchBox = document.getElementById("search-box");
+        const multiSelect = document.getElementById("multi-select");
         const slider = document.getElementById("edge-value-slider");
         const datalist = document.getElementById('steplist');
         const storageId = "network-slider-value"
@@ -57,16 +57,28 @@
         // and update the display
         slider.addEventListener('input', displaySliderValue)
 
-        // the default slider value comes either from the "min_edge_value" query param,
-        // the local storage (to persist across pages), or a value passed to the script
-        const defaultValue = parseInt(new URLSearchParams(document.location.search).get('min_edge_value'))
-        || parseInt(window.localStorage.getItem(storageId)) || 0
-        let max = updateSliderTicks()
-        slider.value = Math.min(defaultValue, max);
-        displaySliderValue()
+        // doubleClick on nodes to expand neigboring nodes
+        network.on('doubleClick', params => {
+            if (params.nodes.length > 0) {
+                expandNode(params.nodes[0]);
+            }
+            return false
+        });
 
-        // doubleClick on nodes to expand neigboring nodes, not working
-        network.on('doubleClick', expandNode);
+        // configure UI state
+        const params = new URLSearchParams(document.location.search)
+        const store = window.localStorage
+        const sliderValue = parseInt(params.get('min_edge_value')) || parseInt(store.getItem(storageId)) || 0
+        const searchValue = params.get('search_value') || ''
+        const selectedValues = (params.get('selected_values') || '').split('|')
+        let max = updateSliderTicks()
+        slider.value = Math.min(sliderValue, max);
+        searchBox.value = searchValue
+        Array.from(multiSelect.options).forEach(option => {
+            option.selected = selectedValues.includes(option.label);
+        });
+        displaySliderValue()
+        updateNetwork()
 
         function displaySliderValue() {
             let value = slider.value;
@@ -99,8 +111,8 @@
 
             // remove those which are not selected in the select box, if a selection has been made
             const selectedIds = Array.from(multiSelect.selectedOptions)
-                    .filter(option => option.style.display != "none")
-                    .map(option => Number(option.value));
+                .filter(option => option.style.display != "none")
+                .map(option => Number(option.value));
 
             if (selectedIds.length > 0) {
                 visibleNodeIds.forEach(id => {
@@ -184,44 +196,157 @@
             });
         }
 
-        function expandNode(params) {
+        function expandNode(nodeId) {
+
+            // Get connected nodes and edges
+            const connectedNodeIds = network.getConnectedNodes(nodeId);
+            const connectedEdgeIds = network.getConnectedEdges(nodeId);
+
+            // Show connected edges depending on slider value
+            if (connectedEdgeIds.length > 0) {
+                const edgesToUpdate = connectedEdgeIds.map(edgeId => {
+                    const edge = edges.get(edgeId);
+                    edge.hidden = edge.value < Number(slider.value);
+                    return edge;
+                });
+                edges.update(edgesToUpdate);
+            }
+            // Show connected nodes depending on whether they have visible edges
+            const visibleNodeIds = new Set();
+            connectedEdgeIds.forEach(edgeId => {
+                const edge = edges.get(edgeId);
+                if (!edge.hidden) {
+                    visibleNodeIds.add(edge.from);
+                    visibleNodeIds.add(edge.to);
+                }
+            });
+            const nodesToUpdate = connectedNodeIds.map(nodeId => {
+                const node = nodes.get(nodeId)
+                node.hidden = !visibleNodeIds.has(node.id)
+                return node
+            })
+            nodes.update(nodesToUpdate)
+        }
+
+        function resolveOverlaps(nodes, minDistance=200, maxDistance=1000, timeout = 5000) {
+            let startTime = Date.now();
+            let elapsed = 0;
+            let changed = true;
+
+            while (changed && elapsed < timeout) {
+                changed = false;
+
+                for (let i = 0; i < nodes.length; i++) {
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        let node1 = nodes[i];
+                        let node2 = nodes[j];
+
+                        let dx = node2.x - node1.x;
+                        let dy = node2.y - node1.y;
+                        let distance = Math.sqrt(dx * dx + dy * dy);
+
+                        // Nodes are too close
+                        if (distance < minDistance) {
+                            changed = true;
+
+                            let angle = Math.atan2(dy, dx);
+                            let moveDistance = (minDistance - distance) / 2.0;
+
+                            node1.x -= moveDistance * Math.cos(angle);
+                            node1.y -= moveDistance * Math.sin(angle);
+                            node2.x += moveDistance * Math.cos(angle);
+                            node2.y += moveDistance * Math.sin(angle);
+                        }
+                        // Nodes are too far
+                        else if (distance > maxDistance) {
+                            changed = true;
+
+                            let angle = Math.atan2(dy, dx);
+                            let moveDistance = (distance - maxDistance) / 2.0;
+
+                            node1.x += moveDistance * Math.cos(angle);
+                            node1.y += moveDistance * Math.sin(angle);
+                            node2.x -= moveDistance * Math.cos(angle);
+                            node2.y -= moveDistance * Math.sin(angle);
+                        }
+                    }
+                }
+
+                // Update the elapsed time
+                elapsed = Date.now() - startTime;
+            }
+
+            if (elapsed >= timeout) {
+                console.warn("Time limit reached before resolving all overlaps and separations");
+            }
+        }
+
+        function distributeNodesRadially(centerNodeId, connectedNodes, minDistance = 100) {
+
+            // Fetch the central node
+            const centerNode = nodes.get(centerNodeId);
+
+            // Determine the angle step based on the number of nodes
+            const angleStep = 2 * Math.PI / connectedNodes.length;
+
+            // Distribute nodes radially
+            const nodesToUpdate = connectedNodes.map((node, index) => {
+                const angle = index * angleStep;
+                return {
+                    id: node.id,
+                    x: centerNode.x + minDistance * Math.cos(angle),
+                    y: centerNode.y + minDistance * Math.sin(angle),
+                    hidden: false
+                };
+            });
+
+            nodes.update(nodesToUpdate);
+
+            network.redraw()
+        }
+
+
+        // not working
+        function showSubgraph(params) {
             if (params.nodes.length > 0) {
                 const nodeId = params.nodes[0];
 
                 // Get connected nodes and edges
-                const connectedNodes = network.getConnectedNodes(nodeId)
-                    .map(id => Number(id));
+                const connectedNodes = network.getConnectedNodes(nodeId);
                 const connectedEdges = network.getConnectedEdges(nodeId);
 
-                // Show connected nodes
-                if (connectedNodes.length > 0) {
-                    let nodesToUpdate = connectedNodes.map(neighborId => ({
-                        id: neighborId,
-                        hidden: false
-                    }));
-                    nodes.update(nodesToUpdate)
-                    //fitNetwork(nodesToUpdate)
-                }
+                // Update connected nodes to be visible
+                const nodesToUpdate = connectedNodes.map(id => ({ id, hidden: false }));
+                nodes.update(nodesToUpdate);
 
-                // Show connected edges
-                if (connectedEdges.length > 0) {
-                    const edgesToUpdate = connectedEdges.map(edgeId => {
-                        const edge = edges.get(edgeId);
-                        edge.hidden = false;
-                        return edge;
-                    });
-                    edges.update(edgesToUpdate);
-                }
+                // Update connected edges to be visible
+                const edgesToUpdate = connectedEdges.map(id => ({ id, hidden: false }));
+                edges.update(edgesToUpdate);
 
-                // Temporarily enable physics
-                network.setOptions({ physics: true });
+                // Backup hidden nodes and remove them temporarily
+                const hiddenNodes = nodes.get({ filter: node => node.hidden });
+                nodes.remove(hiddenNodes.map(node => node.id));
 
-                // Disable physics after stabilization
+                // Enable physics and let it stabilize the remaining nodes
+                network.setOptions({ physics: {
+                    enabled: true,
+                    solver: 'repulsion',
+                    repulsion: {
+                        nodeDistance: 500,
+                        centralGravity: 0.1
+                    }
+                } });
+
                 network.once("stabilized", function() {
+                    // Restore the hidden nodes
+                    //nodes.add(hiddenNodes);
+
+                    // Disable physics
                     network.setOptions({ physics: false });
                 });
             }
         }
+
 
     });
 </script>

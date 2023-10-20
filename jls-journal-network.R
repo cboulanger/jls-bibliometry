@@ -179,10 +179,10 @@ vn <- visNetwork(vis_nodes, vis_edges, width = "100%", height = "1000px") |>
   ) |>
   visInteraction(hideEdgesOnZoom=T, hideNodesOnDrag=T) |>
   #visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T), selectedBy = "group") |>
-  visSave(result_file, selfcontained = T)
+  visSave('cache/last-vis-graph.html', selfcontained = T)
 
 # add searchbox html to page
-original_html <- readLines(result_file) |> paste(collapse = "\n")
+original_html <- readLines('cache/last-vis-graph.html') |> paste(collapse = "\n")
 custom_html <- readLines("lib/vis-network-searchbox.html") |> paste(collapse = "\n")
 new_html <- gsub("<body([^>]*)>", paste0("\1\n", custom_html), original_html)
 writeLines(new_html, result_file)
