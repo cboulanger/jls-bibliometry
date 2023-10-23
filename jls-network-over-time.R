@@ -8,6 +8,7 @@ top_n_cited <- 20
 top_n_citing <- 20
 year_start <- 2000
 year_end <- 2010
+years_per_slice <- 5
 
 cat("Importing data for",as.character(year_start),"-",as.character(year_end),fill=TRUE)
 df <- read.csv("data/jls-author-network-owndata.csv", encoding = "UTF-8") |>
@@ -34,7 +35,8 @@ data <- df |>
 
 cat("Found", as.character(nrow(data)), "items.",fill=TRUE)
 
-cat("Determine the", as.character(top_n_cited), "most cited authors in 5-year time windows",fill=TRUE)
+cat("Determine the", as.character(top_n_cited), "most cited authors in ",
+    as.character(years_per_slice), "-year windows",fill=TRUE)
 
 # create sliding time windows
 sliding_window <- function(year) {
@@ -123,20 +125,7 @@ edge_spells <- data |>
   as.data.frame()
 
 # Create vertex spells with columns [onset, terminus, vertex_id]
-# Find the first (min) and last (max) time each vertex is mentioned
-
-vertex_spells2 <- edge_spells |>
-  pivot_longer(
-    cols = c(tail, head),
-    names_to = "temp_col",
-    values_to = "vertex_id"
-  ) |>
-  select(onset, terminus, vertex_id) |>
-  mutate(vertex_id = as.integer(vertex_id)) |>
-  arrange(vertex_id, onset, terminus) |>
-  unique() |>
-  as.data.frame()
-
+# Find the first (min) and last (max) time each vertex is mentioned and add a spell for all years in between
 vertex_spells <- edge_spells |>
   pivot_longer(
     cols = c(tail, head),
@@ -150,6 +139,15 @@ vertex_spells <- edge_spells |>
     terminus = max(terminus)
   ) |>
   ungroup() |>
+  rowwise() |>
+  summarise(
+    onset = list(seq(from = onset, to = terminus, by = 1)),
+    vertex_id = vertex_id
+  ) |>
+  unnest(onset) |>
+  arrange(vertex_id, onset) |>
+  mutate(onset = as.integer(onset)) |>
+  mutate(terminus = onset) |>
   select(onset, terminus, vertex_id) |>
   as.data.frame()
 
@@ -160,9 +158,9 @@ dynNet <- networkDynamic(net,
 
 cat("Rendering movie...",fill=TRUE)
 
-get_normalized_indegree <- function(net) {
+get_normalized_indegree <- function(slice) {
   # Calculate in-degrees
-  in_degree_values <- degree(net, gmode = "indegree")
+  in_degree_values <- degree(slice, gmode = "indegree")
 
   # Normalize by the maximum in-degree
   max_degree <- max(in_degree_values, na.rm = TRUE)
@@ -177,12 +175,28 @@ get_normalized_indegree <- function(net) {
   }
   # Replace NAs with 0s
   normalized_in_degree[is.na(normalized_in_degree)] <- 0
+
   return(normalized_in_degree)
 }
+
+get_vertex_labels <- function(slice) {
+  in_degree_values <- degree(slice, gmode = "indegree")
+  hide_vertex_labels_ids <- which(in_degree_values < 3)
+  existing_labels <- if ("vertex.names" %in% list.vertex.attributes(slice)) {
+    get.vertex.attribute(slice, "vertex.names")
+  } else {
+    as.character(1:network.size(slice))
+  }
+  existing_labels[hide_vertex_labels_ids] <- ""
+  return(existing_labels)
+}
+
 
 # Create the plot parameter list
 plot_params <- list(
   vertex.cex = get_normalized_indegree,
+  label = get_vertex_labels,
+  label.cex = get_normalized_indegree,
   main="Network of most-cited authors with most-citing authors (Source: JLS dataset)",
   displaylabels=TRUE)
 
@@ -194,8 +208,3 @@ render.d3movie(dynNet,
                frame.duration = 5000,
                filename = "data/jls-most-cited-most-citing-movie.html",
                verbose = TRUE)
-
-
-
-
-
