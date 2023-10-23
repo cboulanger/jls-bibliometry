@@ -1,4 +1,4 @@
-import os, json, re
+import json, re
 from py2neo import Graph, Path, Node, Relationship, walk
 from pyvis.network import Network
 from IPython.display import display, HTML, Image
@@ -283,3 +283,4 @@ def cleanup(graph: Graph):
         WITH r, [key IN keys(r) WHERE key STARTS WITH 'vis_'] AS keys
         CALL apoc.create.removeRelProperties(r, keys) YIELD rel RETURN rel;
     """)
+
