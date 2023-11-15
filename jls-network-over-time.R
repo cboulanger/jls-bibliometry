@@ -206,5 +206,5 @@ render.d3movie(dynNet,
                plot.par = plot_params,
                d3.options = d3_options,
                frame.duration = 5000,
-               filename = "data/jls-most-cited-most-citing-movie.html",
+               filename = "figure/jls-most-cited-most-citing-movie.html",
                verbose = TRUE)

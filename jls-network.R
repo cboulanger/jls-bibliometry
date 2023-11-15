@@ -25,7 +25,7 @@ ignore_journals <- c('sustainability',
                      "doaj (doaj: directory of open access journals)")
 # data source
 journal_id <- "jls"
-data_vendor <- "openalex"
+data_vendor <- "wos"
 data_file <- paste0("data/", journal_id, "-journal-network-", data_vendor, ".csv")
 result_file <- paste0("docs/", journal_id, "-journal-network-", data_vendor, ".html")
 
@@ -160,29 +160,15 @@ vn <- visNetwork(vis_nodes, vis_edges, width = "100%", height = "1000px") |>
     color = list(color = "#0085AF", highlight = "#C62F4B")
   )  |>
   visLayout(randomSeed = 11)  |>
-  visPhysics(
-    solver = "forceAtlas2Based",
-    barnesHut = list(
-      gravitationalConstant = -50000,
-      centralGravity = 0.3,
-      springLength = 200,
-      springConstant = 0.04
-    ),
-    forceAtlas2Based = list(
-      avoidOverlap = 1,
-      centralGravity = 0,
-      gravitationalConstant = -50000,  # Increase the negative value
-      springLength = 2000,                # Increase this value
-      springConstant = 0.001,             # Decrease this value
-      damping = 0.9                      # Adjust as needed
-    )
-  ) |>
+  visPhysics(solver = "forceAtlas2Based",
+             forceAtlas2Based = list(gravitationalConstant = -5000)) |>
   visInteraction(hideEdgesOnZoom=T, hideNodesOnDrag=T) |>
-  #visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T), selectedBy = "group") |>
-  visSave('cache/last-vis-graph.html', selfcontained = T)
+  visOptions(highlightNearest = list(enabled = T, degree = 1, hover = T), selectedBy = "group") |>
+  #visSave('cache/last-vis-graph.html', selfcontained = T)
+  visSave(result_file, selfcontained = T)
 
 # add searchbox html to page
-original_html <- readLines('cache/last-vis-graph.html') |> paste(collapse = "\n")
-custom_html <- readLines("lib/vis-network-searchbox.html") |> paste(collapse = "\n")
-new_html <- gsub("<body([^>]*)>", paste0("\1\n", custom_html), original_html)
-writeLines(new_html, result_file)
+#original_html <- readLines('cache/last-vis-graph.html') |> paste(collapse = "\n")
+#custom_html <- readLines("lib/vis-network-searchbox.html") |> paste(collapse = "\n")
+#new_html <- gsub("<body([^>]*)>", paste0("\1\n", custom_html), original_html)
+#writeLines(new_html, result_file)

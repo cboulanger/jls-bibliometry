@@ -11,7 +11,7 @@ partially erroneous and incomplete due to the current deficiencies automated ext
 should be evenly distributed. Therefore, results that do not concern individual values but express larger trends,
 are expected be generally reliable.
 
-The python scripts in the `scripts` folder were written with help from https://chat.openai.com using GPT-4.
+The scripts in this repository were written with coding assistance from https://chat.openai.com using GPT-4.
 
 ## Requirements & Configuration
 
@@ -30,8 +30,8 @@ The python scripts in the `scripts` folder were written with help from https://c
 
 ## Data
 
-- Data from OpenAlex as well as the data obtained from machine extraction can be found here: (insert ZENODO-Link here)
-  data dumps which can be imported into the Neo4J Graph database v4.4.
+- Data from OpenAlex as well as the data obtained from machine extraction can be found here: 
+  https://doi.org/10.5281/zenodo.8389925 as a data dump which can be imported into the Neo4J Graph database v4.4.
 - The data obtained from the Web of Science cannot be shared due to legal reasons.
 - The same applies to the fulltexts of the JLS, which you will have to download and convert to text
   files yourself, if you want to run the corpus analyses. 
