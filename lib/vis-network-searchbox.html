@@ -1,17 +1,19 @@
 <div id="title">$title</div>
 <button id="toggle-button">Show/hide Search</button>
-
 <div id="popup">
     <fieldset>
         <legend>Journals</legend>
-        <input id="search-box" type="text" placeholder="Enter search term(s) divided by ';'">
+        <div class="container">
+            <input id="search-box" type="text" placeholder="Enter search term(s) divided by ';'">
+            <button id="search-box-reset">Reset</button>
+        </div>
         <select id="journal-select" multiple="multiple"></select>
-        <datalist id="steplist"></datalist>
     </fieldset>
     <fieldset>
         <legend>Minimum number of citations</legend>
-        <div id="edge-value-setter">
+        <div class="container">
             <input id="edge-value-input" value="1">
+            <datalist id="steplist"></datalist>
             <input id="edge-value-slider" type="range" list="steplist" value="1">
             <button id="edge-value-reset">Reset</button>
         </div>
@@ -22,22 +24,33 @@
     </fieldset>
     <fieldset>
         <legend>More information</legend>
+        $description
         <a href="$file_journal_table" target="_blank">Journals</a> |
         <a href="$file_group_table" target="_blank">Journal Groups</a> |
         <a href="$file_communities" target="_blank">Community Graph</a>
     </fieldset>
 </div>
 
-<script>
+<script type="text/javascript">
     document.getElementById('toggle-button').addEventListener('click', function() {
         var popup = document.getElementById('popup');
         popup.classList.toggle('show');
     });
 </script>
 
-<script id="group-data" type="application/json">$groups</script>
+<script id="group-data" type="application/json">
+$groups
+</script>
 
 <style>
+    #title {
+        position: fixed;
+        font-weight: bold;
+        top: 20px;
+        right: 20px;
+        z-index: 1001;
+    }
+
     #toggle-button {
         position: fixed;
         top: 20px;
@@ -50,7 +63,8 @@
         position: fixed;
         top: 50px;
         left: 20px;
-        width: 300px;
+        width: 30vw;
+        min-width: 300px;
         padding: 5px;
         font-family: inherit;
         border: 1px solid #ddd;
@@ -76,33 +90,35 @@
         width: 100%;
     }
 
-    #edge-value-setter {
-        display: flex; /* Enables flexbox layout */
-        width: 100%; /* Ensures the container fills its parent */
+    #group-select {
+        height: 150px;
+    }
+
+    .container {
+        display: flex;
+        width: 100%;
     }
 
     #edge-value-input {
-        width: 40px;
+        width: 30px;
         flex-shrink: 0;
         margin-right: 10px;
     }
 
-    #edge-value-reset {
+    #edge-value-slider,
+    #search-box {
+        flex-grow: 1;
+        flex-shrink: 1;
+        flex-basis: auto; /* or you can set a specific value */
+        min-width: 100px;
+    }
+
+    #edge-value-reset,
+    #search-box-reset {
         width: 50px;
+        height: 30px;
         flex-shrink: 0;
         margin-left: 10px;
-    }
-
-    #edge-value-slider {
-        flex-grow: 1;
-    }
-
-
-    #title {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 1001;
     }
 
     [id^="selectedByhtmlwidget"] {
@@ -115,16 +131,17 @@
     .node-title-label: {
         font-weight: bold !important;
     }
-
-
 </style>
-<script>
+
+<script type="text/javascript">
+
     document.addEventListener("DOMContentLoaded", function() {
         const container = document.getElementsByClassName("vis-network")[0]
         const network = container.parentElement.chart
         const nodes = network.body.data.nodes;
         const edges = network.body.data.edges;
         const searchBox = document.getElementById("search-box");
+        const searchBoxReset = document.getElementById("search-box-reset");
         const journalSelect = document.getElementById("journal-select");
         const edgeValueSlider = document.getElementById("edge-value-slider");
         const edgeValueInput = document.getElementById("edge-value-input");
@@ -132,7 +149,52 @@
         const datalist = document.getElementById('steplist');
         const storageId = "network-slider-value"
         const groups = JSON.parse(document.getElementById('group-data').textContent)
-        const groupSelect =  document.getElementById("group-select");
+        const groupSelect =  document.getElementById("group-select")
+
+        // Helper class to persist values in the URL hash
+        class UrlHash {
+            // Parses the current URL hash into a key-value map
+            static parseHash() {
+                const hash = window.location.hash.substring(1);
+                const entries = hash.split('|').filter(entry => entry.includes(':'));
+                return new Map(entries.map(entry => {
+                    const [key, value] = entry.split(':');
+                    return [key, decodeURIComponent(value)];
+                }));
+            }
+
+            // Serializes the key-value map back into a hash string
+            static serializeHash(map) {
+                return Array.from(map.entries()).map(entry => {
+                    const [key, value] = entry;
+                    return `${key}:${encodeURIComponent(value)}`;
+                }).join('|');
+            }
+
+            // Sets a value in the URL hash for the given key
+            static set(key, value) {
+                const map = this.parseHash();
+                map.set(key, value); // No encoding here, it's done in serializeHash
+                window.location.hash = this.serializeHash(map);
+            }
+
+            // Retrieves a value from the URL hash for the given key
+            // Returns the default value if the key is not found
+            static get(key, defaultValue = undefined) {
+                const map = this.parseHash();
+                return map.has(key) ? map.get(key) : defaultValue;
+            }
+
+            // Removes a key (and its associated value) from the URL hash
+            static remove(key) {
+                const map = this.parseHash();
+                if (map.has(key)) {
+                    map.delete(key);
+                    window.location.hash = this.serializeHash(map);
+                }
+            }
+        }
+
 
         // populate journal selectbox
         nodes.forEach(node => {
@@ -144,21 +206,30 @@
 
         // filter options depending on user input
         const options = Array.from(journalSelect.options);
-        searchBox.addEventListener("input", () => {
-            const searchValues = searchBox.value.toLowerCase().split(";").map(s => s.trim());
-            options.forEach(option => {
-                const optionText = option.text.toLowerCase();
-                const found = searchValues.some(searchValue => optionText.includes(searchValue))
-                option.style.display = found ? "" : "none";
-            });
-        });
+        searchBox.addEventListener("input", filterJournals);
 
         // react to un/selection in the selectbox
         let updateTimeout;
         journalSelect.addEventListener("change", () => {
             clearTimeout(updateTimeout)
             updateTimeout = setTimeout(updateNetwork, 500)
+            let selectedIds = Array.from(journalSelect.selectedOptions).map(o => o.value)
+            UrlHash.set('selectedJournals', selectedIds.join(","))
         });
+
+        // reset the search box, the journal select box and the group select box
+        searchBoxReset.addEventListener('click',  () => {
+            searchBox.value = "";
+            Array.from(journalSelect.selectedOptions)
+                .concat(Array.from(groupSelect.selectedOptions))
+                .forEach(option =>  {
+                    option.selected = false
+                })
+            Array.from(journalSelect.options).forEach(option => option.style.display="")
+            updateNetwork()
+            UrlHash.remove('search')
+            UrlHash.remove('selectedJournals')
+        })
 
         // on slider value change, show only
         edgeValueSlider.addEventListener('change', updateNetwork);
@@ -170,13 +241,8 @@
         // reset the min edge value
         edgeValueReset.addEventListener('click',  () => updateEdgeValue(1))
 
-        // doubleClick on nodes to expand neigboring nodes
-        /*network.on('doubleClick', params => {
-            if (params.nodes.length > 0) {
-                expandNode(params.nodes[0]);
-            }
-            return false
-        });*/
+        // doubleClick on nodes to show neigboring nodes
+        network.on('click', params => params.nodes.length > 0 && showConnectedNodes(params.nodes[0]));
 
         // populate group selectbox
         Object.keys(groups).forEach(key => {
@@ -201,23 +267,42 @@
             }
         });
 
-        // configure UI state
-        const params = new URLSearchParams(document.location.search)
-        const store = window.localStorage
-        const searchValue = params.get('search_value') || ''
-        const selectedValues = (params.get('selected_values') || '').split('|')
-        let sliderValue = parseInt(params.get('min_edge_value')) || parseInt(store.getItem(storageId)) || 1
-        let max = updateSliderTicks()
+        // configure UI state from hash values
 
-        sliderValue = Math.min(sliderValue, max);
-        searchBox.value = searchValue
-        Array.from(journalSelect.options).forEach(option => {
-            option.selected = selectedValues.includes(option.text);
-        });
-        updateEdgeValue(sliderValue)
+        // search box
+        let searchText = UrlHash.get('search', '')
+        searchBox.value = searchText
+        filterJournals()
+
+        // slider
+        let minEdgeValue = parseInt(UrlHash.get('minEdgeValue', '1'))
+        let max = updateSliderTicks()
+        minEdgeValue = Math.min(minEdgeValue, max);
+        updateEdgeValue(minEdgeValue)
+
+        // journal select box
+        let selectedJournals = (UrlHash.get('selectedJournals', '')).split(',')
+        if (selectedJournals.length > 0) {
+            Array.from(journalSelect.options).forEach(option => {
+                option.selected = selectedJournals.includes(option.value);
+            });
+            updateNetwork()
+        }
+
+        // fit network into viewport
         fitNetwork()
 
         //=============== functions ===============
+
+        function filterJournals() {
+            const searchValues = searchBox.value.toLowerCase().split(";").map(s => s.trim());
+            options.forEach(option => {
+                const optionText = option.text.toLowerCase();
+                const found = searchValues.some(searchValue => optionText.includes(searchValue))
+                option.style.display = found ? "" : "none";
+            });
+            UrlHash.set('search', searchBox.value)
+        }
 
         function updateEdgeValue(value) {
             if (edgeValueSlider.value !== value || edgeValueInput.value !== value){
@@ -226,17 +311,20 @@
                 window.localStorage.setItem(storageId, value);
                 updateNetwork()
             }
+            UrlHash.set('minEdgeValue', value)
         }
 
         // update the network depending on UI state (selectbox, slider, manual node selection)
         function updateNetwork () {
+
+            console.log("Updating network...")
 
             // show/hide edges based on value
             let sliderValue = Number(edgeValueSlider.value);
 
             edgesToUpdate = edges.map(edge => ({
                 id: edge.id,
-                hidden: edge.value < sliderValue
+                hidden: edge.value < minEdgeValue
             }))
             edges.update(edgesToUpdate)
             updateSliderTicks()
@@ -329,158 +417,35 @@
             return max;
         }
 
-        function expandNode(nodeId) {
+        function showConnectedNodes(nodeId) {
 
             // Get connected nodes and edges
             const connectedNodeIds = network.getConnectedNodes(nodeId);
             const connectedEdgeIds = network.getConnectedEdges(nodeId);
 
-            // Show connected edges depending on slider value
+            console.log({nodeId, connectedNodeIds, connectedEdgeIds})
+
+            // Show connected nodes
+            if (connectedNodeIds.length > 0) {
+                const nodesToUpdate = connectedNodeIds.map(id => {
+                    const node = nodes.get(parseInt(id))
+                    node.hidden = false;
+                    return node
+                })
+                nodes.update(nodesToUpdate)
+            }
+
+            // Show connected edges
             if (connectedEdgeIds.length > 0) {
-                const edgesToUpdate = connectedEdgeIds.map(edgeId => {
-                    const edge = edges.get(edgeId);
-                    edge.hidden = edge.value < Number(edgeValueSlider.value);
+                const edgesToUpdate = connectedEdgeIds.map(id => {
+                    const edge = edges.get(id);
+                    edge.hidden = false;
                     return edge;
                 });
                 edges.update(edgesToUpdate);
             }
-            // Show connected nodes depending on whether they have visible edges
-            const visibleNodeIds = new Set();
-            connectedEdgeIds.forEach(edgeId => {
-                const edge = edges.get(edgeId);
-                if (!edge.hidden) {
-                    visibleNodeIds.add(edge.from);
-                    visibleNodeIds.add(edge.to);
-                }
-            });
-            const nodesToUpdate = connectedNodeIds.map(nodeId => {
-                const node = nodes.get(nodeId)
-                node.hidden = !visibleNodeIds.has(node.id)
-                return node
-            })
-            nodes.update(nodesToUpdate)
+
         }
-
-        function resolveOverlaps(nodes, minDistance=200, maxDistance=1000, timeout = 5000) {
-            let startTime = Date.now();
-            let elapsed = 0;
-            let changed = true;
-
-            while (changed && elapsed < timeout) {
-                changed = false;
-
-                for (let i = 0; i < nodes.length; i++) {
-                    for (let j = i + 1; j < nodes.length; j++) {
-                        let node1 = nodes[i];
-                        let node2 = nodes[j];
-
-                        let dx = node2.x - node1.x;
-                        let dy = node2.y - node1.y;
-                        let distance = Math.sqrt(dx * dx + dy * dy);
-
-                        // Nodes are too close
-                        if (distance < minDistance) {
-                            changed = true;
-
-                            let angle = Math.atan2(dy, dx);
-                            let moveDistance = (minDistance - distance) / 2.0;
-
-                            node1.x -= moveDistance * Math.cos(angle);
-                            node1.y -= moveDistance * Math.sin(angle);
-                            node2.x += moveDistance * Math.cos(angle);
-                            node2.y += moveDistance * Math.sin(angle);
-                        }
-                        // Nodes are too far
-                        else if (distance > maxDistance) {
-                            changed = true;
-
-                            let angle = Math.atan2(dy, dx);
-                            let moveDistance = (distance - maxDistance) / 2.0;
-
-                            node1.x += moveDistance * Math.cos(angle);
-                            node1.y += moveDistance * Math.sin(angle);
-                            node2.x -= moveDistance * Math.cos(angle);
-                            node2.y -= moveDistance * Math.sin(angle);
-                        }
-                    }
-                }
-
-                // Update the elapsed time
-                elapsed = Date.now() - startTime;
-            }
-
-            if (elapsed >= timeout) {
-                console.warn("Time limit reached before resolving all overlaps and separations");
-            }
-        }
-
-        function distributeNodesRadially(centerNodeId, connectedNodes, minDistance = 100) {
-
-            // Fetch the central node
-            const centerNode = nodes.get(centerNodeId);
-
-            // Determine the angle step based on the number of nodes
-            const angleStep = 2 * Math.PI / connectedNodes.length;
-
-            // Distribute nodes radially
-            const nodesToUpdate = connectedNodes.map((node, index) => {
-                const angle = index * angleStep;
-                return {
-                    id: node.id,
-                    x: centerNode.x + minDistance * Math.cos(angle),
-                    y: centerNode.y + minDistance * Math.sin(angle),
-                    hidden: false
-                };
-            });
-
-            nodes.update(nodesToUpdate);
-
-            network.redraw()
-        }
-
-
-        // not working
-        function showSubgraph(params) {
-            if (params.nodes.length > 0) {
-                const nodeId = params.nodes[0];
-
-                // Get connected nodes and edges
-                const connectedNodes = network.getConnectedNodes(nodeId);
-                const connectedEdges = network.getConnectedEdges(nodeId);
-
-                // Update connected nodes to be visible
-                const nodesToUpdate = connectedNodes.map(id => ({ id, hidden: false }));
-                nodes.update(nodesToUpdate);
-
-                // Update connected edges to be visible
-                const edgesToUpdate = connectedEdges.map(id => ({ id, hidden: false }));
-                edges.update(edgesToUpdate);
-
-                // Backup hidden nodes and remove them temporarily
-                const hiddenNodes = nodes.get({ filter: node => node.hidden });
-                nodes.remove(hiddenNodes.map(node => node.id));
-
-                // Enable physics and let it stabilize the remaining nodes
-                network.setOptions({ physics: {
-                    enabled: true,
-                    solver: 'repulsion',
-                    repulsion: {
-                        nodeDistance: 500,
-                        centralGravity: 0.1
-                    }
-                } });
-
-                network.once("stabilized", function() {
-                    // Restore the hidden nodes
-                    //nodes.add(hiddenNodes);
-
-                    // Disable physics
-                    network.setOptions({ physics: false });
-                });
-            }
-        }
-
-
     });
 </script>
 
