@@ -10,7 +10,7 @@
         <select id="journal-select" multiple="multiple"></select>
     </fieldset>
     <fieldset>
-        <legend>Minimum number of citations</legend>
+        <legend>Minimum yearly citations ratio: <span id="min-cit-ratio"></span></legend>
         <div class="container">
             <input id="edge-value-input" value="1">
             <datalist id="steplist"></datalist>
@@ -24,25 +24,28 @@
     </fieldset>
     <fieldset>
         <legend>More information</legend>
-        $description
-        <a href="$file_journal_table" target="_blank">Journals</a> |
-        <a href="$file_group_table" target="_blank">Journal Groups</a> |
-        <a href="$file_communities" target="_blank">Community Graph</a>
+        <p>$description</p>
+        <p>
+            <a href="$file_journal_table" target="_blank">Table of journals</a> |
+            <a href="$file_group_table" target="_blank">Table of journal groups</a> |
+            <a href="$file_communities" target="_blank">Graph of communities</a> |
+            Distribution of yearly citation ratios: <a href="$file_distribution_normalized_weights" target="_blank">Median</a>,
+            <a href="$file_distr_scaled_adj_log_transf_norm_weights" target="_blank">Scaled adjusted log-transformed</a>
+        </p>
+
     </fieldset>
 </div>
 
-<script type="text/javascript">
-    document.getElementById('toggle-button').addEventListener('click', function() {
-        var popup = document.getElementById('popup');
-        popup.classList.toggle('show');
-    });
-</script>
-
-<script id="group-data" type="application/json">
-$groups
-</script>
+<!-- data -->
+<script id="group-data" type="application/json">$groups</script>
+<script id="scaled-to-ratio" type="application/json">$scaled_to_ratio</script>
 
 <style>
+
+    body {
+        padding: 0px !important;
+    }
+
     #title {
         position: fixed;
         font-weight: bold;
@@ -100,6 +103,7 @@ $groups
     }
 
     #edge-value-input {
+        display: none;
         width: 30px;
         flex-shrink: 0;
         margin-right: 10px;
@@ -136,20 +140,26 @@ $groups
 <script type="text/javascript">
 
     document.addEventListener("DOMContentLoaded", function() {
+        const byId = document.getElementById.bind(document);
         const container = document.getElementsByClassName("vis-network")[0]
         const network = container.parentElement.chart
         const nodes = network.body.data.nodes;
         const edges = network.body.data.edges;
-        const searchBox = document.getElementById("search-box");
-        const searchBoxReset = document.getElementById("search-box-reset");
-        const journalSelect = document.getElementById("journal-select");
-        const edgeValueSlider = document.getElementById("edge-value-slider");
-        const edgeValueInput = document.getElementById("edge-value-input");
-        const edgeValueReset = document.getElementById("edge-value-reset");
-        const datalist = document.getElementById('steplist');
-        const storageId = "network-slider-value"
-        const groups = JSON.parse(document.getElementById('group-data').textContent)
-        const groupSelect =  document.getElementById("group-select")
+        const groups = JSON.parse(byId('group-data').textContent)
+        const scaled_to_ratio = JSON.parse(byId('scaled-to-ratio').textContent)
+
+        // UI
+        const toggleButton = byId('toggle-button');
+        const popup = byId('popup');
+        const searchBox = byId("search-box");
+        const searchBoxReset = byId("search-box-reset");
+        const journalSelect = byId("journal-select");
+        const minCitRatio = byId("min-cit-ratio");
+        const edgeValueSlider = byId("edge-value-slider");
+        const edgeValueInput = byId("edge-value-input");
+        const edgeValueReset = byId("edge-value-reset");
+        const datalist = byId('steplist');
+        const groupSelect =  byId("group-select")
 
         // Helper class to persist values in the URL hash
         class UrlHash {
@@ -195,10 +205,13 @@ $groups
             }
         }
 
+        //  popup toggle button
+        toggleButton.addEventListener('click', () => popup.classList.toggle('show'));
 
         // populate journal selectbox
         nodes.forEach(node => {
             const option = document.createElement("option");
+            option.dataset.group = node.group
             option.value = node.id;
             option.text = node.label.split("(")[0]; //  this needs a more robust
             journalSelect.appendChild(option);
@@ -218,67 +231,61 @@ $groups
         });
 
         // reset the search box, the journal select box and the group select box
-        searchBoxReset.addEventListener('click',  () => {
-            searchBox.value = "";
-            Array.from(journalSelect.selectedOptions)
-                .concat(Array.from(groupSelect.selectedOptions))
-                .forEach(option =>  {
-                    option.selected = false
-                })
-            Array.from(journalSelect.options).forEach(option => option.style.display="")
-            updateNetwork()
-            UrlHash.remove('search')
-            UrlHash.remove('selectedJournals')
-        })
+        searchBoxReset.addEventListener('click',  () => resetJournalFilter())
+
+        // populate the slider data list
+        for (let i = 0; i < 100; i++) {
+            if (scaled_to_ratio[i]) {
+                let option = document.createElement('option');
+                option.value = i+1;
+                datalist.appendChild(option);
+            }
+        }
 
         // on slider value change, show only
         edgeValueSlider.addEventListener('change', updateNetwork);
 
         // and update the display
-        edgeValueSlider.addEventListener('input', evt => updateEdgeValue(evt.target.value))
-        edgeValueInput.addEventListener('change', evt => updateEdgeValue(evt.target.value))
+        edgeValueSlider.addEventListener('input', evt => updateEdgeValue(evt.target.value, false))
+        edgeValueInput.addEventListener('change', evt => updateEdgeValue(evt.target.value, true))
 
         // reset the min edge value
-        edgeValueReset.addEventListener('click',  () => updateEdgeValue(1))
+        edgeValueReset.addEventListener('click',  () => updateEdgeValue(1, true))
 
         // doubleClick on nodes to show neigboring nodes
         network.on('click', params => params.nodes.length > 0 && showConnectedNodes(params.nodes[0]));
 
         // populate group selectbox
-        Object.keys(groups).forEach(key => {
+        groups.forEach((key, index) => {
             const option = document.createElement("option");
-            option.value = key;
+            option.value = index+1;
             option.text = key;
             groupSelect.appendChild(option);
         })
 
         groupSelect.addEventListener("change", () => {
-            let journalsInGroups = []
-            Array.from(groupSelect.selectedOptions).forEach(option => {
-                groupName = option.value
-                group = groups[groupName]
-                journalsInGroups = journalsInGroups.concat(group)
+            searchBox.value = ""
+            let groups = Array.from(groupSelect.selectedOptions).map(o => Number(o.value))
+            Array.from(journalSelect.options).forEach(option => {
+                option.selected = groups.includes(Number(option.dataset.group))
+                option.style.display = option.selected ? "" : "none";
             })
-            if (journalsInGroups.length > 0) {
-                Array.from(journalSelect.options).forEach(option => {
-                    option.selected = journalsInGroups.includes(option.text)
-                })
-                updateNetwork();
-            }
+            updateNetwork()
+            fitNetwork()
         });
 
         // configure UI state from hash values
 
         // search box
         let searchText = UrlHash.get('search', '')
-        searchBox.value = searchText
-        filterJournals()
+        if (searchText != "") {
+            searchBox.value = searchText
+            filterJournals()
+        }
 
         // slider
         let minEdgeValue = parseInt(UrlHash.get('minEdgeValue', '1'))
-        let max = updateSliderTicks()
-        minEdgeValue = Math.min(minEdgeValue, max);
-        updateEdgeValue(minEdgeValue)
+        updateEdgeValue(minEdgeValue, true)
 
         // journal select box
         let selectedJournals = (UrlHash.get('selectedJournals', '')).split(',')
@@ -304,30 +311,52 @@ $groups
             UrlHash.set('search', searchBox.value)
         }
 
-        function updateEdgeValue(value) {
+        function resetJournalFilter() {
+            searchBox.value = "";
+            Array.from(journalSelect.selectedOptions)
+                .concat(Array.from(groupSelect.selectedOptions))
+                .forEach(option =>  {
+                option.selected = false
+            })
+            Array.from(journalSelect.options).forEach(option => option.style.display="")
+            updateNetwork()
+            fitNetwork()
+            UrlHash.remove('search')
+            UrlHash.remove('selectedJournals')
+        }
+
+        // given a value between 1-100, return the corresponding median yearly citation ratio or undefined if
+        // no such value exists. if no value is passed, get it from the slider
+        function getMinEdgeWeight(value) {
+            value = value || parseInt(edgeValueSlider.value)
+            return scaled_to_ratio[value-1]
+        }
+
+        function updateEdgeValue(value, update=false) {
             if (edgeValueSlider.value !== value || edgeValueInput.value !== value){
                 edgeValueSlider.value = value;
                 edgeValueInput.value = value
-                window.localStorage.setItem(storageId, value);
-                updateNetwork()
+                let minWeight = getMinEdgeWeight(value)
+                minCitRatio.innerHTML = String(minWeight)
+                if (update) {
+                    updateNetwork()
+                }
             }
             UrlHash.set('minEdgeValue', value)
         }
 
         // update the network depending on UI state (selectbox, slider, manual node selection)
-        function updateNetwork () {
+        function updateNetwork() {
 
-            console.log("Updating network...")
+            let minWeight = getMinEdgeWeight() || 0;
+            console.log(`Updating network with minimum edge weight of ${minWeight}...`)
 
             // show/hide edges based on value
-            let sliderValue = Number(edgeValueSlider.value);
-
             edgesToUpdate = edges.map(edge => ({
                 id: edge.id,
-                hidden: edge.value < minEdgeValue
+                hidden: edge.value < minWeight
             }))
             edges.update(edgesToUpdate)
-            updateSliderTicks()
 
             // create a set of ids of nodes that have visible edges connected to it
             const updatedEdges = edges.get();
@@ -376,75 +405,17 @@ $groups
             }
         }
 
-        // configure the slider ticks based on an arry of edges having a "value" property
-        // returns the max value of the edges
-        function updateSliderTicks() {
-            // determine highest and lowest value of the visible edges
-            let visibleEdges = edges.get().filter(edge => !edge.hidden);
-            let min = 1;
-            let max = Math.max(...edges.get().map(edge => edge.value));
-
-            // no need to update anything
-            if (edgeValueSlider.min == min && edgeValueSlider.max == max) {
-                return
-            }
-
-            // remove the datalist options
-            while (datalist.firstChild) {
-                datalist.removeChild(dataList.firstChild);
-            }
-
-            // configure the slider
-            edgeValueSlider.min = min;
-            edgeValueSlider.max = max;
-
-            // dynamically determine the slider options (=ticks)
-            let steps = [1, 2, 5, 10, 25, 50, 100, 500, 1000];
-            let maxOptions = 10;
-            let delta = max - min;
-            let step;
-            for(let s of steps) {
-                step = s;
-                if(Math.ceil(delta / s) <= maxOptions) break;
-            }
-            // Start from the nearest higher multiple of step
-            let start = Math.floor(min / step) * step;
-            for (let i = start; i <= max; i += step) {
-                let option = document.createElement('option');
-                option.value = Math.max(i,min);
-                datalist.appendChild(option);
-            }
-            return max;
-        }
-
         function showConnectedNodes(nodeId) {
-
-            // Get connected nodes and edges
-            const connectedNodeIds = network.getConnectedNodes(nodeId);
-            const connectedEdgeIds = network.getConnectedEdges(nodeId);
-
-            console.log({nodeId, connectedNodeIds, connectedEdgeIds})
-
-            // Show connected nodes
-            if (connectedNodeIds.length > 0) {
-                const nodesToUpdate = connectedNodeIds.map(id => {
-                    const node = nodes.get(parseInt(id))
-                    node.hidden = false;
-                    return node
-                })
-                nodes.update(nodesToUpdate)
-            }
-
-            // Show connected edges
-            if (connectedEdgeIds.length > 0) {
-                const edgesToUpdate = connectedEdgeIds.map(id => {
-                    const edge = edges.get(id);
-                    edge.hidden = false;
-                    return edge;
-                });
-                edges.update(edgesToUpdate);
-            }
-
+            console.log(`Showing network of node #${nodeId}`)
+            const nodeIds = network.getConnectedNodes(nodeId).map(id => Number(id))
+            nodeIds.push(nodeId)
+            Array.from(journalSelect.options).forEach(option => {
+                if (nodeIds.includes(Number(option.value))) {
+                    option.selected = true
+                    option.style.display=""
+                }
+            })
+            updateNetwork()
         }
     });
 </script>

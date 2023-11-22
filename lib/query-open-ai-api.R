@@ -84,7 +84,7 @@ rename_headers <- function(df) {
     if (length(non_na_values) > 0) {
       print(paste("Querying OpenAI GPT to create community label for ", col_name))
       # Find the common theme for non-NA values
-      common_theme <- tolower(find_common_theme(non_na_values))
+      common_theme <- find_common_theme(non_na_values)
       print(common_theme)
 
       # Rename the column header
