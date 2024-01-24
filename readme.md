@@ -17,7 +17,7 @@ The scripts in this repository were written with coding assistance from https://
 
 - You'll need a Neo4J server >= v4.4
 - For the Jupyter Notebook, you neet install the required python modules (either through conda or pip):
-`py2neo python-dotenv pandas pyvis nltk mplcursors tqdm langdetect langcodes language_data`
+`py2neo python-dotenv pandas pyvis nltk mplcursors tqdm langdetect langcodes language_data matplotlib`
 - In order to generate screenshots from the interactive HTML visualizations, you need to install the Playwright library:
   https://playwright.dev/python/docs/intro
 - Rename `.env.dist` and adapt the values to fit your local environment
