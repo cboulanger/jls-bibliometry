@@ -89,10 +89,10 @@ get_author_year_gender <- function(author_year, given_names_db) {
     unique()
 }
 
-plotAuthorsGenderTimeseries <- function(year_gender, filename, title, year_steps = 5) {
-  gender_by_year <- year_gender %>%
-    group_by(year) %>% 
-    count(gender) %>% 
+plotAuthorsGenderTimeseries <- function(year_gender, filename, title="", year_steps = 5) {
+  gender_by_year <- year_gender |>
+    group_by(year) |> 
+    count(gender) |> 
     pivot_wider(names_from = gender, values_from = n, values_fill=0)
   gender_by_year$sum <- rowSums(gender_by_year[2:3])
   max_num_articles <- max(gender_by_year$sum)
@@ -101,8 +101,9 @@ plotAuthorsGenderTimeseries <- function(year_gender, filename, title, year_steps
   breaks_years <- seq(min(gender_by_year$year), max(gender_by_year$year))
   breaks_years <- breaks_years[breaks_years %% year_steps == 0]
 
-  p <- gender_by_year[, 1:3] %>% pivot_longer(-year) %>% 
+  p <- gender_by_year[, 1:3] |> pivot_longer(-year) |> 
     ggplot(aes(x=year,y=value,fill=name)) +
+    coord_fixed(ratio = 0.3) +
     ggtitle(title) +
     geom_bar(stat = 'identity') +
     geom_line(
@@ -132,26 +133,9 @@ plotAuthorsGenderTimeseries <- function(year_gender, filename, title, year_steps
 }
 
 config <- parse_dotenv()
+
+# "Journal of Law and Society - Gender of article authors (Source: constellate.org)"
+author_year <- get_author_year("data/jls-author-year-constellate.csv")
 given_names_db <- get_given_names_db(author_year, config$GENDERIZER_API_KEY)
-
-# data was downloaded from constellate.org
-
-jls <- get_author_year("data/jls-author-year-constellate.csv") |>
-  get_author_year_gender(given_names_db = given_names_db)
-plotAuthorsGenderTimeseries(jls, "docs/article-fig-06.png",
-                              "Journal of Law and Society - Gender of article authors (Source: constellate.org")
-
-jls2 <- get_author_year("data/jls-author-year-openalex.csv") |>
-  get_author_year_gender(given_names_db = given_names_db)
-plotAuthorsGenderTimeseries(jls, "docs/article-fig-06.png",
-                            "Journal of Law and Society - Gender of article authors (Source: openalex.org)")
-
-sls <- get_author_year("data/sls-author-year.csv") |>
-  get_author_year_gender(given_names_db = given_names_db)
-plotAuthorsGenderTimeseries(sls, "docs/sls-author-gender.png",
-                              "Social & Legal Studies - Gender of article authors")
-
-ijlc <- get_author_year("data/ijlc-author-year.csv") |>
-  get_author_year_gender(given_names_db = given_names_db)
-plotAuthorsGenderTimeseries(sls, "docs/ijlc-author-gender.png",
-                            "International Journal of Law and Context - Gender of article authors")
+get_author_year_gender(author_year, given_names_db) |>
+  plotAuthorsGenderTimeseries("docs/article-fig-06.png")
