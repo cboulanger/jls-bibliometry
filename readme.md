@@ -1,4 +1,4 @@
-# The Journal of Law and Society - Bibliometric and Digital Humanities Perspectives
+# The Journal of Law and Society in context - a bibliometric analysis
 
 This repository contains code and generated figures for the paper by Boulanger/Creutzfeldt/Hendry,
 "The Journal of Law and Society - Bibliometric and Digital Humanities Perspectives" (working title).
