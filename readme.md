@@ -1,9 +1,11 @@
 # The Journal of Law and Society in context - a bibliometric analysis
 
-This repository contains code and generated figures for the paper by Boulanger/Creutzfeldt/Hendry,
-"The Journal of Law and Society - Bibliometric and Digital Humanities Perspectives" (working title).
+This repository contains code and generated figures for the following publications:
 
-Please visit https://cboulanger.github.io/jls-bibliometry/ for the figures.
+- BOULANGER, C., CREUTZFELDT, N., & HENDRY, J. The Journal of Law and Society in context: a bibliometric analysis. Journal of Law and Society. 2024;1–25. https://doi.org/10.1111/jols.12465   (Open Access)
+- BOULANGER, C., CREUTZFELDT, N., & HENDRY, J. The Journal of Law and Society in Context: Our Bibliometric Methodology’ (2023) J. of Law and Society Blog, at https://journaloflawandsociety.co.uk/blog/the-journal-of-law-and-society-in-context-descriptive-analysis-of-metadata/ . Archived at https://zenodo.org/doi/10.5281/zenodo.10807615 
+
+The graphs and figures are also published in high resolution at https://cboulanger.github.io/jls-bibliometry .
 
 The data for the  queries in the notebooks were obtained by querying the Web of Science and OpenAlex databases as well as
 by automatic citation extraction from the full texts of the Journal of Law and Society. The data of citation extraction is
