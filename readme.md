@@ -1,5 +1,7 @@
 # The Journal of Law and Society in context - a bibliometric analysis
 
+[![DOI](https://zenodo.org/badge/645641151.svg)](https://zenodo.org/doi/10.5281/zenodo.10807724)
+
 This repository contains code and generated figures for the following publications:
 
 - BOULANGER, C., CREUTZFELDT, N., & HENDRY, J. The Journal of Law and Society in context: a bibliometric analysis. Journal of Law and Society. 2024;1–25. https://doi.org/10.1111/jols.12465   (Open Access)
