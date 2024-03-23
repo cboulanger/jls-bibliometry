@@ -37,5 +37,6 @@ The scripts in this repository were written with coding assistance from https://
 - Data from OpenAlex as well as the data obtained from machine extraction can be found here: 
   https://doi.org/10.5281/zenodo.8389925 as a data dump which can be imported into the Neo4J Graph database v4.4.
 - The data obtained from the Web of Science cannot be shared due to legal reasons.
-- The same applies to the fulltexts of the JLS, which you will have to download and convert to text
-  files yourself, if you want to run the corpus analyses. 
+- The same applies to the fulltexts of the JLS. If you do not have a licence for https://onlinelibrary.wiley.com/journal/14676478
+  you can use the service https://constellate.org and apply for the temporal download of the full text stored at 
+  https://www.jstor.org/journal/jlawsociety and https://www.jstor.org/journal/britjlawsoci for research purposes.
